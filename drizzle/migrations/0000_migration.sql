@@ -1,0 +1,14 @@
+CREATE TABLE public.agent_tasks (id uuid PRIMARY KEY, objective text NOT NULL, outcome text NOT NULL, steps integer NOT NULL DEFAULT 0, verified boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE public.agent_reflections (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), task_id uuid NOT NULL, objective text NOT NULL, failure_point text NOT NULL, component text NOT NULL, root_cause text NOT NULL, pivot_action text NOT NULL, patch text NOT NULL, failed_action text NOT NULL DEFAULT '', corrective_action text NOT NULL DEFAULT '', created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE public.agent_skills (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text NOT NULL, dsl text NOT NULL, terms text NOT NULL DEFAULT '', vector double precision[] NOT NULL DEFAULT '{}', status text NOT NULL DEFAULT 'candidate', successes integer NOT NULL DEFAULT 0, failures integer NOT NULL DEFAULT 0, baseline_rate double precision, candidate_rate double precision, created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE public.agent_policy_weights (ngram text PRIMARY KEY, weight double precision NOT NULL DEFAULT 0, observations integer NOT NULL DEFAULT 0, updated_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE public.agent_playbooks (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), content text NOT NULL, task_count integer NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE public.agent_operator_messages (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), task_id uuid NOT NULL, content text NOT NULL, consumed boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX agent_operator_messages_task_idx ON public.agent_operator_messages (task_id, consumed);
+GRANT ALL ON public.agent_tasks, public.agent_reflections, public.agent_skills, public.agent_policy_weights, public.agent_playbooks, public.agent_operator_messages TO service_role;
+ALTER TABLE public.agent_tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.agent_reflections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.agent_skills ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.agent_policy_weights ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.agent_playbooks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.agent_operator_messages ENABLE ROW LEVEL SECURITY;
