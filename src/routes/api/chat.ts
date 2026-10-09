@@ -58,7 +58,7 @@ type ChatMessage = { role: ChatRole; content: string; tool_calls?: ToolCall[]; t
 type ToolStatus = "completed" | "error" | "interrupted" | "unknown";
 type TerminalState = "completed" | "failed" | "cancelled" | "runtime_limit" | "step_limit" | "context_limit";
 type AgentEvent =
-  | { type: "delta"; task_id: string; step: number; content: string }
+  | { type: "delta"; task_id: string; step: number; content?: string; reasoning_content?: string }
   | { type: "agent_event"; task_id: string; step: number; event: { type: "tool_start"; tool: string; call_id: string; input: string } }
   | { type: "agent_event"; task_id: string; step: number; event: { type: "tool_result"; tool: string; call_id: string; status: ToolStatus; output: string } }
   | { type: "agent_event"; task_id: string; step: number; event: { type: "plan_update"; plan: string } }
@@ -790,6 +790,8 @@ async function receiveModel(response: Response, taskId: string, step: number, se
     if (!object(choice.delta)) continue;
     const delta = choice.delta;
     if (delta.refusal !== undefined && delta.refusal !== null) return fail("MODEL_REFUSAL", "A modell visszautasította a kérést.", 422);
+    const reasoning = typeof delta.reasoning_content === "string" ? delta.reasoning_content : typeof delta.reasoning === "string" ? delta.reasoning : typeof delta.thinking === "string" ? delta.thinking : "";
+    if (reasoning) await send({ type: "delta", task_id: taskId, step, reasoning_content: reasoning });
     if (delta.content !== undefined && delta.content !== null) {
       if (typeof delta.content !== "string") return fail("UNSUPPORTED_MODEL_CONTENT", "A modell nem támogatott tartalomformátumot küldött.", 502);
       content += delta.content;
@@ -855,7 +857,12 @@ async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMess
   let verified = false;
   const think: Think = async (system, user) => {
     const upstream = await callModel(config, [{ role: "system", content: system }, { role: "user", content: user }], [], signal, deadline);
-    return (await receiveModel(upstream, taskId, steps, async () => undefined, signal)).content;
+    await stream.send({ type: "delta", task_id: taskId, step: steps, reasoning_content: "\n\n── Kognitív feldolgozás ──\n" });
+    return (await receiveModel(upstream, taskId, steps, async (event) => {
+      if (event.type !== "delta") return;
+      const text = event.reasoning_content ?? event.content;
+      if (text) await stream.send({ type: "delta", task_id: taskId, step: steps, reasoning_content: text });
+    }, signal)).content;
   };
   const probe = sandbox ? async (command: string) => (await sandbox.exec(command, "bash", 30)).status === "completed" : null;
   let noteSeq = 0;
@@ -863,7 +870,7 @@ async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMess
     const callId = `cog-${taskId}-${noteSeq++}`;
     const tool = `kognitív_${label}`;
     await stream.send({ type: "agent_event", task_id: taskId, step: steps, event: { type: "tool_start", tool, call_id: callId, input: label } });
-    await stream.send({ type: "agent_event", task_id: taskId, step: steps, event: { type: "tool_result", tool, call_id: callId, status: "completed", output: detail.slice(0, 4000) } });
+    await stream.send({ type: "agent_event", task_id: taskId, step: steps, event: { type: "tool_result", tool, call_id: callId, status: "completed", output: detail } });
   };
   const lifecycle = new cog.Lifecycle((from, to) => note("fázis", `${from} → ${to}`));
   let sigma: Sigma = cog.emptySigma(objective);
