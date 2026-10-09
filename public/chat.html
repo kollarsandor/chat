@@ -6237,6 +6237,10 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
     </div>
     <div class="image-flow-reference" id="image-flow-reference"></div>
     <div class="image-flow-field">
+      <label for="image-flow-file">Kiinduló kép</label>
+      <input id="image-flow-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+    </div>
+    <div class="image-flow-field">
       <label for="image-flow-prompt" id="image-flow-prompt-label">Írd le a létrehozandó képet</label>
       <textarea id="image-flow-prompt" maxlength="4000" placeholder="Például: egy napfényes, minimalista kávézó növényekkel, filmes fényekkel"></textarea>
     </div>
@@ -6248,7 +6252,10 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
         <option value="1024x1536">Álló</option>
       </select>
     </div>
-    <label class="image-flow-option"><input id="image-flow-transparent" type="checkbox"> Átlátszó háttér kérése, ha támogatott</label>
+    <div class="image-flow-field">
+      <label for="image-flow-quality">Minőség</label>
+      <select id="image-flow-quality"><option value="low">Alacsony</option><option value="medium" selected>Közepes</option><option value="high">Magas</option></select>
+    </div>
     <div class="image-flow-actions">
       <button class="image-flow-cancel" id="image-flow-cancel" type="button">Mégse</button>
       <button class="image-flow-submit" id="image-flow-submit" type="button">Kép létrehozása</button>
@@ -7198,7 +7205,9 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
   function extractGeneratedImageDescriptors(payload){
     var candidates = [];
     if(!payload) return Promise.resolve([]);
-    if(Array.isArray(payload)) candidates = payload;
+    if(payload.output_data) return extractGeneratedImageDescriptors(payload.output_data);
+    if(Array.isArray(payload.image)) candidates = payload.image;
+    else if(Array.isArray(payload)) candidates = payload;
     else if(Array.isArray(payload.data)) candidates = payload.data;
     else if(Array.isArray(payload.images)) candidates = payload.images;
     else if(Array.isArray(payload.output)) candidates = payload.output;
@@ -7215,7 +7224,8 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
       if(text){
         try{
           var body = JSON.parse(text);
-          message = (body.error && (body.error.message || body.error)) || body.message || text;
+          message = (body.error && (body.error.message || body.error)) || body.message || body.details || body.detail || text;
+          if(typeof message !== "string") message = JSON.stringify(message);
         }catch(error){ message = text; }
       }
       var exception = new Error(String(message));
@@ -7232,6 +7242,7 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
       return fetch(endpoint, options()).then(function(response){
         if(response.ok){
           var contentType = response.headers.get("content-type") || "";
+          if(contentType.indexOf("text/event-stream") !== -1) return readFlyImageStream(response);
           if(contentType.indexOf("application/json") !== -1) return response.json();
           return response.text().then(function(text){
             try{ return JSON.parse(text); }catch(error){ return {data:[{url:text}]}; }
@@ -7244,28 +7255,49 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
     return attempt();
   }
 
+  async function readFlyImageStream(response){
+    var reader = response.body.getReader();
+    var decoder = new TextDecoder();
+    var buffer = "";
+    var result = null;
+    function consume(frame){
+      var data = frame.split(/\r?\n/).filter(function(line){ return line.indexOf("data:") === 0; }).map(function(line){ return line.slice(5).trimStart(); }).join("\n");
+      if(!data || data === "[DONE]") return;
+      var event = JSON.parse(data);
+      if(event.status >= 400 || event.details || event.error){
+        var error = event.details || event.message || event.error;
+        throw new Error(typeof error === "string" ? error : JSON.stringify(error));
+      }
+      if(event.output_data || Array.isArray(event.image)) result = event;
+    }
+    try{
+      while(true){
+        var chunk = await reader.read();
+        buffer += chunk.done ? decoder.decode() : decoder.decode(chunk.value, {stream:true});
+        var boundary;
+        while((boundary = /\r?\n\r?\n/.exec(buffer))){
+          consume(buffer.slice(0, boundary.index));
+          buffer = buffer.slice(boundary.index + boundary[0].length);
+        }
+        if(chunk.done){ if(buffer.trim()) consume(buffer); break; }
+      }
+    }finally{ reader.releaseLock(); }
+    if(!result) throw new Error("A FlyMyAI nem adott vissza képet.");
+    return result;
+  }
+
   function requestGeneratedImages(prompt, settings){
-    return requestImageEndpoint(["/api/images/generations", "/api/images/generate"], function(){
-      var body = {prompt:prompt, size:settings.size, n:1};
-      if(settings.transparent) body.background = "transparent";
-      return {
-        method:"POST",
-        credentials:"same-origin",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify(body)
-      };
-    }).then(extractGeneratedImageDescriptors);
+    return requestEditedImages(prompt, imageFlowState.image, settings);
   }
 
   function requestEditedImages(prompt, reference, settings){
     return descriptorToFile(reference).then(function(file){
-      return requestImageEndpoint(["/api/images/edits", "/api/images/edit"], function(){
+      return requestImageEndpoint(["/api/images/edits"], function(){
         var form = new FormData();
         form.append("image", file, file.name || "image.png");
         form.append("prompt", prompt);
         form.append("size", settings.size);
-        form.append("n", "1");
-        if(settings.transparent) form.append("background", "transparent");
+        form.append("quality", settings.quality);
         return {method:"POST", credentials:"same-origin", body:form};
       });
     }).then(extractGeneratedImageDescriptors);
@@ -7308,7 +7340,9 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
     var promptLabel = document.getElementById("image-flow-prompt-label");
     var promptInput = document.getElementById("image-flow-prompt");
     if(!modal || !promptInput) return;
-    imageFlowState = {mode:mode === "edit" ? "edit" : "generate", image:descriptor || null, lastFocus:document.activeElement};
+    imageFlowState = {mode:mode === "edit" ? "edit" : "generate", image:descriptor || selectedImages[0] || null, lastFocus:document.activeElement};
+    var referenceInput = document.getElementById("image-flow-file");
+    if(referenceInput) referenceInput.value = "";
     if(title) title.textContent = imageFlowState.mode === "edit" ? "Kép szerkesztése" : "Kép létrehozása";
     if(promptLabel) promptLabel.textContent = imageFlowState.mode === "edit" ? "Írd le a kívánt átalakítást" : "Írd le a létrehozandó képet";
     promptInput.placeholder = imageFlowState.mode === "edit" ? "Például: cseréld a hátteret alkonyati tengerpartra, tartsd meg az alanyt" : "Például: egy napfényes, minimalista kávézó növényekkel, filmes fényekkel";
@@ -7337,22 +7371,22 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
     if(imageRequestInProgress) return;
     var promptInput = document.getElementById("image-flow-prompt");
     var sizeInput = document.getElementById("image-flow-size");
-    var transparentInput = document.getElementById("image-flow-transparent");
+    var qualityInput = document.getElementById("image-flow-quality");
     var prompt = promptInput ? promptInput.value.trim() : "";
     if(!prompt){
       toast(imageFlowState.mode === "edit" ? "Adj meg szerkesztési utasítást." : "Adj meg képgenerálási leírást.", "err");
       if(promptInput) promptInput.focus();
       return;
     }
-    if(imageFlowState.mode === "edit" && (!imageFlowState.image || !imageFlowState.image.url)){
-      toast("Nincs kiválasztott szerkesztendő kép.", "err");
+    if(!imageFlowState.image || !imageFlowState.image.url){
+      toast("Válassz ki egy kiinduló képet.", "err");
       return;
     }
     imageRequestInProgress = true;
     setImageFlowBusy(true);
     var mode = imageFlowState.mode;
     var reference = imageFlowState.image;
-    var settings = {size:sizeInput ? sizeInput.value : "1024x1024", transparent:!!(transparentInput && transparentInput.checked)};
+    var settings = {size:sizeInput ? sizeInput.value : "1024x1024", quality:qualityInput ? qualityInput.value : "medium"};
     var pendingMessage = {role:"assistant", content:"", isImageRequest:true, imageRequestPending:true, imageOperation:mode, createdAt:Date.now()};
     messages.push(pendingMessage);
     render();
@@ -7380,6 +7414,15 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
   }
 
   function bindImageFlowControls(){
+    var referenceInput = document.getElementById("image-flow-file");
+    if(referenceInput) referenceInput.addEventListener("change", function(){
+      var file = referenceInput.files && referenceInput.files[0];
+      if(!file) return;
+      createDescriptorFromFile(file).then(function(descriptor){
+        imageFlowState.image = descriptor;
+        renderImageFlowReference(descriptor);
+      }).catch(function(error){ toast(error.message, "err"); });
+    });
     var launch = document.getElementById("btn-attach-generate");
     var upload = document.getElementById("btn-attach-file");
     var photos = document.getElementById("btn-attach-photos");
