@@ -78,7 +78,6 @@ type ToolOutput = { status: ToolStatus; result: Record<string, unknown> };
 type RuntimeConfig = {
   orcaKey: string;
   instaKey: string | null;
-  accessTokens: string[];
   browserHosts: Set<string>;
   allowedDomains: string[];
 };
@@ -176,7 +175,6 @@ function providerTools(names: ToolName[]): Record<string, unknown>[] {
 function requiredEnvironment(): RuntimeConfig {
   const orcaKey = process.env["ORCAROUTER_API_KEY"];
   const instaKey = process.env["INSTAVM_API_KEY"];
-  const auth = process.env["CHAT_ACCESS_TOKENS"];
   const declaredLifetime = process.env["CHAT_DEPLOYMENT_MAX_REQUEST_MS"];
   if (typeof orcaKey !== "string" || orcaKey.trim().length < 12 || /\s/.test(orcaKey)) return fail("CONFIGURATION", "ORCAROUTER_API_KEY érvénytelen.", 503);
   if (instaKey !== undefined && (instaKey.trim().length < 12 || /\s/.test(instaKey))) return fail("CONFIGURATION", "INSTAVM_API_KEY érvénytelen.", 503);
