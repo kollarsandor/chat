@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { readSseData } from "@/lib/chat-stream";
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 
@@ -24,7 +24,6 @@ const MAX_FILE_CHUNK_BYTES = 3_000;
 const MAX_FILE_PAGE_BYTES = 6_000;
 const MAX_FILE_BYTES = 8_388_608;
 const MAX_OUTPUT_BYTES = 1_048_576;
-const MAX_AUTH_TASKS_PER_MINUTE = 6;
 const MAX_UPSTREAM_RETRIES = 5;
 const CLEANUP_TIMEOUT_MS = 12_000;
 const EXECUTE_WAIT_MAX_SECONDS = 600;
