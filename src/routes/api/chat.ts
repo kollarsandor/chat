@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { readSseData } from "@/lib/chat-stream";
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 
@@ -24,7 +24,6 @@ const MAX_FILE_CHUNK_BYTES = 3_000;
 const MAX_FILE_PAGE_BYTES = 6_000;
 const MAX_FILE_BYTES = 8_388_608;
 const MAX_OUTPUT_BYTES = 1_048_576;
-const MAX_AUTH_TASKS_PER_MINUTE = 6;
 const MAX_UPSTREAM_RETRIES = 5;
 const CLEANUP_TIMEOUT_MS = 12_000;
 const EXECUTE_WAIT_MAX_SECONDS = 600;
@@ -78,7 +77,6 @@ type ToolOutput = { status: ToolStatus; result: Record<string, unknown> };
 type RuntimeConfig = {
   orcaKey: string;
   instaKey: string | null;
-  accessTokens: string[];
   browserHosts: Set<string>;
   allowedDomains: string[];
 };
@@ -176,38 +174,16 @@ function providerTools(names: ToolName[]): Record<string, unknown>[] {
 function requiredEnvironment(): RuntimeConfig {
   const orcaKey = process.env["ORCAROUTER_API_KEY"];
   const instaKey = process.env["INSTAVM_API_KEY"];
-  const auth = process.env["CHAT_ACCESS_TOKENS"];
   const declaredLifetime = process.env["CHAT_DEPLOYMENT_MAX_REQUEST_MS"];
   if (typeof orcaKey !== "string" || orcaKey.trim().length < 12 || /\s/.test(orcaKey)) return fail("CONFIGURATION", "ORCAROUTER_API_KEY érvénytelen.", 503);
   if (instaKey !== undefined && (instaKey.trim().length < 12 || /\s/.test(instaKey))) return fail("CONFIGURATION", "INSTAVM_API_KEY érvénytelen.", 503);
-  if (!auth) return fail("CONFIGURATION", "CHAT_ACCESS_TOKENS beállítása kötelező.", 503);
-  const accessTokens = auth.split(",").map((t) => t.trim());
-  if (accessTokens.some((t) => t.length < 24 || /\s/.test(t)) || new Set(accessTokens).size !== accessTokens.length) return fail("CONFIGURATION", "A hozzáférési tokenek érvénytelenek.", 503);
   if (!declaredLifetime || !/^\d+$/.test(declaredLifetime) || Number(declaredLifetime) < MAX_RUNTIME_MS + CLEANUP_TIMEOUT_MS) return fail("DEPLOYMENT_UNSUPPORTED", "Hatórás HTTP kapcsolatot támogató telepítés és CHAT_DEPLOYMENT_MAX_REQUEST_MS szükséges.", 503);
   if (process.env["CHAT_SINGLE_INSTANCE"] !== "true") return fail("DEPLOYMENT_UNSUPPORTED", "A lokális kvóták csak egyprocesszos telepítésben érvényesek. Állítsa be a CHAT_SINGLE_INSTANCE=true értéket kizárólag ilyen telepítésnél.", 503);
   const allowedDomains = (process.env["CHAT_SANDBOX_ALLOWED_DOMAINS"] ?? "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
   if (allowedDomains.some((host) => !/^[a-z0-9.-]+$/.test(host) || host.startsWith(".") || host.endsWith("."))) return fail("CONFIGURATION", "Érvénytelen sandbox gazdagép engedélylista.", 503);
   const browserHosts = new Set((process.env["CHAT_BROWSER_ALLOWED_HOSTS"] ?? "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean));
   if ([...browserHosts].some((host) => !/^[a-z0-9.-]+$/.test(host) || host.startsWith(".") || host.endsWith("."))) return fail("CONFIGURATION", "Érvénytelen böngésző gazdagép engedélylista.", 503);
-  return { orcaKey, instaKey: instaKey ?? null, accessTokens, browserHosts, allowedDomains };
-}
-
-function tokenMatches(token: string, candidate: string): boolean {
-  const a = createHash("sha256").update(token).digest();
-  const b = createHash("sha256").update(candidate).digest();
-  return timingSafeEqual(a, b);
-}
-
-const active = new Map<string, { count: number; requests: number[] }>();
-function admission(key: string): () => void {
-  const now = Date.now();
-  const item = active.get(key) ?? { count: 0, requests: [] };
-  item.requests = item.requests.filter((time) => now - time < 60_000);
-  if (item.count >= 1 || item.requests.length >= MAX_AUTH_TASKS_PER_MINUTE) return fail("QUOTA_EXCEEDED", "Túl sok párhuzamos vagy egymást követő feladat.", 429);
-  item.requests.push(now);
-  item.count++;
-  active.set(key, item);
-  return () => { item.count = Math.max(0, item.count - 1); };
+  return { orcaKey, instaKey: instaKey ?? null, browserHosts, allowedDomains };
 }
 
 async function readLimited(response: Response, limit: number, signal: AbortSignal): Promise<Uint8Array> {
@@ -937,15 +913,8 @@ export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        let release: (() => void) | undefined;
         try {
           const config = requiredEnvironment();
-          const authorization = request.headers.get("authorization");
-          if (!authorization?.startsWith("Bearer ")) return fail("UNAUTHENTICATED", "Hiányzó Bearer hitelesítés.", 401);
-          const token = authorization.slice(7);
-          if (!config.accessTokens.some((candidate) => tokenMatches(token, candidate))) return fail("FORBIDDEN", "Érvénytelen hozzáférési token.", 403);
-          const ownerId = createHash("sha256").update(token).digest("hex");
-          release = admission(ownerId);
           const body = await readRequest(request, request.signal);
           const history = validateClientHistory(body);
           const taskId = randomUUID();
@@ -966,14 +935,12 @@ export const Route = createFileRoute("/api/chat")({
                   clearTimeout(alarm);
                   request.signal.removeEventListener("abort", onDisconnect);
                   await writer.finish();
-                  release?.();
                 });
             },
             cancel() { onDisconnect(); }
           }, { highWaterMark: 4 });
           return new Response(stream, { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "private, no-store, no-cache, no-transform", "X-Accel-Buffering": "no", Connection: "keep-alive" } });
         } catch (error) {
-          release?.();
           return jsonError(error);
         }
       }
