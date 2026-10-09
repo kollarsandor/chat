@@ -8,3 +8,7 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+## Decisions
+- tsconfig: noPropertyAccessFromIndexSignature and noUncheckedIndexedAccess disabled — imported chat.ts (982 lines) uses dot access on Record types throughout; relaxing two flags was chosen over rewriting 144 call sites.
+- Chat frontend is a static public/chat.html (395KB) that / redirects to; chat backend is src/routes/api/chat.ts (OrcaRouter + InstaVM).
