@@ -54,10 +54,10 @@ export const EXTERNAL_CONTRACTS = {
 
 type ChatRole = "system" | "user" | "assistant" | "tool";
 type ToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
-type ChatMessage = { role: ChatRole; content: string; tool_calls?: ToolCall[]; tool_call_id?: string };
+export type ChatMessage = { role: ChatRole; content: string; tool_calls?: ToolCall[]; tool_call_id?: string };
 type ToolStatus = "completed" | "error" | "interrupted" | "unknown";
 type TerminalState = "completed" | "failed" | "cancelled" | "runtime_limit" | "step_limit" | "context_limit";
-type AgentEvent =
+export type AgentEvent =
   | { type: "delta"; task_id: string; step: number; content?: string; reasoning_content?: string }
   | { type: "agent_event"; task_id: string; step: number; event: { type: "tool_start"; tool: string; call_id: string; input: string } }
   | { type: "agent_event"; task_id: string; step: number; event: { type: "tool_result"; tool: string; call_id: string; status: ToolStatus; output: string } }
@@ -809,7 +809,12 @@ async function receiveModel(response: Response, taskId: string, step: number, se
   return { content, calls, finish, usage };
 }
 
-class BoundedSse {
+export interface AgentSink {
+  send(event: AgentEvent): Promise<void>;
+  enqueue(text: string): Promise<void>;
+}
+
+class BoundedSse implements AgentSink {
   private ended = false;
   private timer: ReturnType<typeof setInterval> | null = null;
   private serial: Promise<void> = Promise.resolve();
@@ -841,7 +846,7 @@ class BoundedSse {
   stop(): void { this.ended = true; if (this.timer !== null) clearInterval(this.timer); }
 }
 
-async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMessage[], stream: BoundedSse, signal: AbortSignal, deadline: number, started: number): Promise<void> {
+async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMessage[], stream: AgentSink, signal: AbortSignal, deadline: number, started: number): Promise<void> {
   const cog = await import("@/lib/cognitive.server");
   const objective = [...history].reverse().find((m) => m.role === "user")?.content ?? "";
   const startedAt = new Date().toISOString();
@@ -1058,6 +1063,11 @@ async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMess
     }
     console.info(JSON.stringify({ kind: "chat_task_end", task_id: taskId, outcome, steps, tool_calls: callCount, duration_ms: Math.round(performance.now() - started) }));
   }
+}
+
+export async function runDurableChat(taskId: string, history: ChatMessage[], stream: AgentSink, signal: AbortSignal): Promise<void> {
+  const started = performance.now();
+  await agentRun(taskId, requiredEnvironment(), history, stream, signal, started + MAX_RUNTIME_MS, started);
 }
 
 export const Route = createFileRoute("/api/chat")({
