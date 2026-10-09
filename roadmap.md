@@ -1,5 +1,5 @@
 # Chat streaming
-- [ ] Restore complete provider and cognitive text in the thinking panel and verify live streaming.
+- [x] Restore complete provider and cognitive text in the thinking panel and verify live streaming (2629 fragments, 22235 characters).
 - [x] Stream model text and reasoning throughout every tool step.
 - [x] Show reasoning and tool activity in the existing COT panel.
 - [x] Verify incremental SSE and live datetime + shell tool continuation (103 deltas, both tools completed).
