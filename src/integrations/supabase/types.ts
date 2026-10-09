@@ -191,6 +191,115 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          messages: Json
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          messages?: Json
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          messages?: Json
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      chat_job_events: {
+        Row: {
+          created_at: string
+          id: number
+          job_id: string
+          payload: Json
+        }
+        Insert: {
+          created_at?: string
+          id?: never
+          job_id: string
+          payload: Json
+        }
+        Update: {
+          created_at?: string
+          id?: never
+          job_id?: string
+          payload?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_job_events_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "chat_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_jobs: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          error: string | null
+          finished_at: string | null
+          history: Json
+          id: string
+          lease_expires_at: string | null
+          response_content: string
+          response_reasoning: string
+          started_at: string | null
+          status: string
+          stop_requested: boolean
+          updated_at: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          history: Json
+          id: string
+          lease_expires_at?: string | null
+          response_content?: string
+          response_reasoning?: string
+          started_at?: string | null
+          status?: string
+          stop_requested?: boolean
+          updated_at?: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          history?: Json
+          id?: string
+          lease_expires_at?: string | null
+          response_content?: string
+          response_reasoning?: string
+          started_at?: string | null
+          status?: string
+          stop_requested?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_jobs_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "chat_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
