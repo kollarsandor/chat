@@ -936,14 +936,12 @@ export const Route = createFileRoute("/api/chat")({
                   clearTimeout(alarm);
                   request.signal.removeEventListener("abort", onDisconnect);
                   await writer.finish();
-                  release?.();
                 });
             },
             cancel() { onDisconnect(); }
           }, { highWaterMark: 4 });
           return new Response(stream, { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "private, no-store, no-cache, no-transform", "X-Accel-Buffering": "no", Connection: "keep-alive" } });
         } catch (error) {
-          release?.();
           return jsonError(error);
         }
       }
