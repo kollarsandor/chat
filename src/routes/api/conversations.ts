@@ -54,7 +54,7 @@ export const Route = createFileRoute("/api/conversations")({
                   response_content: job.response_content,
                   response_reasoning: job.response_reasoning,
                   error: job.error,
-                  last_event_id: 0,
+                  last_event_id: lastEventByJob.get(job.id) ?? 0,
                 }
               : null,
           };
