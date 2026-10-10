@@ -1,20 +1,5 @@
 {
   "version": "7",
   "dialect": "postgresql",
-  "entries": [
-    {
-      "idx": 0,
-      "version": "7",
-      "when": 1791537724278,
-      "tag": "0000_migration",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1791561941965,
-      "tag": "0001_create_durable_chat_jobs",
-      "breakpoints": true
-    }
-  ]
+  "entries": []
 }
