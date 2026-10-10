@@ -21,9 +21,22 @@ export const Route = createFileRoute("/api/conversations")({
           .select("id,conversation_id,status,response_content,response_reasoning,error,created_at,updated_at")
           .in("conversation_id", ids)
           .order("created_at", { ascending: false });
-        const latestByConversation = new Map<string, (typeof jobs extends Array<infer T> ? T : never)>();
+        const latestByConversation = new Map<string, NonNullable<typeof jobs>[number]>();
         for (const job of jobs ?? []) {
           if (!latestByConversation.has(job.conversation_id)) latestByConversation.set(job.conversation_id, job);
+        }
+        const jobIds = (jobs ?? []).map((job) => job.id);
+        const lastEventByJob = new Map<string, number>();
+        if (jobIds.length) {
+          const { data: eventRows } = await supabaseAdmin
+            .from("chat_job_events")
+            .select("job_id,id")
+            .in("job_id", jobIds)
+            .order("id", { ascending: false })
+            .limit(1000);
+          for (const row of eventRows ?? []) {
+            if (!lastEventByJob.has(row.job_id)) lastEventByJob.set(row.job_id, row.id);
+          }
         }
         const result = (conversations ?? []).map((conversation) => {
           const job = latestByConversation.get(conversation.id);
