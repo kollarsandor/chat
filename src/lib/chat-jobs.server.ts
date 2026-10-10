@@ -62,3 +62,85 @@ export async function executeChatJob(jobId: string): Promise<{ status: string }>
   await supabaseAdmin.from("chat_jobs").update({ status: finalStatus, error: finalStatus === "failed" ? "A háttérmunka hibával leállt." : null, finished_at: new Date().toISOString(), lease_expires_at: null, updated_at: new Date().toISOString() }).eq("id", jobId);
   return { status: finalStatus };
 }
+
+const FOLLOW_POLL_MS = 800;
+const FOLLOW_HEARTBEAT_MS = 15000;
+const FOLLOW_MAX_MS = 21_600_000;
+
+export function followChatJob(jobId: string, after: number, signal: AbortSignal): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let cursor = after;
+      let closed = false;
+      const startedAt = Date.now();
+      let lastHeartbeat = 0;
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        try {
+          controller.close();
+        } catch {}
+      };
+      signal.addEventListener("abort", close, { once: true });
+      const push = (chunk: string) => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(chunk));
+        } catch {
+          close();
+        }
+      };
+      while (!closed && !signal.aborted) {
+        if (Date.now() - startedAt > FOLLOW_MAX_MS) {
+          push(`data: ${JSON.stringify({ type: "error", task_id: jobId, code: "RUNTIME_LIMIT", message: "Lejárt a teljes feladathatáridő." })}\n\n`);
+          break;
+        }
+        try {
+          const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+          const { data: events } = await supabaseAdmin
+            .from("chat_job_events")
+            .select("id,payload")
+            .eq("job_id", jobId)
+            .gt("id", cursor)
+            .order("id", { ascending: true })
+            .limit(200);
+          let terminal = false;
+          for (const row of events ?? []) {
+            cursor = Math.max(cursor, row.id);
+            const payload = row.payload as { type?: string };
+            push(`id: ${row.id}\ndata: ${JSON.stringify(payload)}\n\n`);
+            if (payload?.type === "done" || payload?.type === "error") terminal = true;
+          }
+          if (terminal) break;
+          const { data: job } = await supabaseAdmin.from("chat_jobs").select("status").eq("id", jobId).single();
+          if (!job || (job.status !== "queued" && job.status !== "running")) {
+            const { data: rest } = await supabaseAdmin
+              .from("chat_job_events")
+              .select("id,payload")
+              .eq("job_id", jobId)
+              .gt("id", cursor)
+              .order("id", { ascending: true })
+              .limit(200);
+            for (const row of rest ?? []) {
+              cursor = Math.max(cursor, row.id);
+              push(`id: ${row.id}\ndata: ${JSON.stringify(row.payload)}\n\n`);
+            }
+            break;
+          }
+        } catch (error) {
+          push(`data: ${JSON.stringify({ type: "error", task_id: jobId, code: "FOLLOW_FAILURE", message: error instanceof Error ? error.message : "Az eseményfolyam megszakadt." })}\n\n`);
+          break;
+        }
+        const now = Date.now();
+        if (now - lastHeartbeat >= FOLLOW_HEARTBEAT_MS) {
+          lastHeartbeat = now;
+          push(`: heartbeat\n\n`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, FOLLOW_POLL_MS));
+      }
+      close();
+    },
+    cancel() {},
+  });
+}

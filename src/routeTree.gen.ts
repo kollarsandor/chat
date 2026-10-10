@@ -11,9 +11,11 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as ApiConversationsRouteImport } from './routes/api/conversations'
 import { Route as ApiInngestRouteImport } from './routes/api/inngest'
 import { Route as ApiOperatorRouteImport } from './routes/api/operator'
 import { Route as ApiImagesEditsRouteImport } from './routes/api/images/edits'
+import { Route as ApiChatJobsJobIdEventsRouteImport } from './routes/api/chat/jobs/$jobId/events'
 import { Route as ApiChatJobsJobIdRedirectRouteImport } from './routes/api/chat/jobs/$jobId/redirect'
 import { Route as ApiChatJobsJobIdStopRouteImport } from './routes/api/chat/jobs/$jobId/stop'
 
@@ -25,6 +27,11 @@ const IndexRoute = IndexRouteImport.update({
 const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiConversationsRoute = ApiConversationsRouteImport.update({
+  id: '/api/conversations',
+  path: '/api/conversations',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiInngestRoute = ApiInngestRouteImport.update({
@@ -42,6 +49,11 @@ const ApiImagesEditsRoute = ApiImagesEditsRouteImport.update({
   path: '/api/images/edits',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiChatJobsJobIdEventsRoute = ApiChatJobsJobIdEventsRouteImport.update({
+  id: '/jobs/$jobId/events',
+  path: '/jobs/$jobId/events',
+  getParentRoute: () => ApiChatRoute,
+} as any)
 const ApiChatJobsJobIdRedirectRoute =
   ApiChatJobsJobIdRedirectRouteImport.update({
     id: '/jobs/$jobId/redirect',
@@ -57,18 +69,22 @@ const ApiChatJobsJobIdStopRoute = ApiChatJobsJobIdStopRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/api/chat': typeof ApiChatRouteWithChildren
+  '/api/conversations': typeof ApiConversationsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/operator': typeof ApiOperatorRoute
   '/api/images/edits': typeof ApiImagesEditsRoute
+  '/api/chat/jobs/$jobId/events': typeof ApiChatJobsJobIdEventsRoute
   '/api/chat/jobs/$jobId/redirect': typeof ApiChatJobsJobIdRedirectRoute
   '/api/chat/jobs/$jobId/stop': typeof ApiChatJobsJobIdStopRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/chat': typeof ApiChatRouteWithChildren
+  '/api/conversations': typeof ApiConversationsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/operator': typeof ApiOperatorRoute
   '/api/images/edits': typeof ApiImagesEditsRoute
+  '/api/chat/jobs/$jobId/events': typeof ApiChatJobsJobIdEventsRoute
   '/api/chat/jobs/$jobId/redirect': typeof ApiChatJobsJobIdRedirectRoute
   '/api/chat/jobs/$jobId/stop': typeof ApiChatJobsJobIdStopRoute
 }
@@ -76,9 +92,11 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/api/chat': typeof ApiChatRouteWithChildren
+  '/api/conversations': typeof ApiConversationsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/operator': typeof ApiOperatorRoute
   '/api/images/edits': typeof ApiImagesEditsRoute
+  '/api/chat/jobs/$jobId/events': typeof ApiChatJobsJobIdEventsRoute
   '/api/chat/jobs/$jobId/redirect': typeof ApiChatJobsJobIdRedirectRoute
   '/api/chat/jobs/$jobId/stop': typeof ApiChatJobsJobIdStopRoute
 }
@@ -87,27 +105,33 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/api/chat'
+    | '/api/conversations'
     | '/api/inngest'
     | '/api/operator'
     | '/api/images/edits'
+    | '/api/chat/jobs/$jobId/events'
     | '/api/chat/jobs/$jobId/redirect'
     | '/api/chat/jobs/$jobId/stop'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/api/chat'
+    | '/api/conversations'
     | '/api/inngest'
     | '/api/operator'
     | '/api/images/edits'
+    | '/api/chat/jobs/$jobId/events'
     | '/api/chat/jobs/$jobId/redirect'
     | '/api/chat/jobs/$jobId/stop'
   id:
     | '__root__'
     | '/'
     | '/api/chat'
+    | '/api/conversations'
     | '/api/inngest'
     | '/api/operator'
     | '/api/images/edits'
+    | '/api/chat/jobs/$jobId/events'
     | '/api/chat/jobs/$jobId/redirect'
     | '/api/chat/jobs/$jobId/stop'
   fileRoutesById: FileRoutesById
@@ -115,6 +139,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApiChatRoute: typeof ApiChatRouteWithChildren
+  ApiConversationsRoute: typeof ApiConversationsRoute
   ApiInngestRoute: typeof ApiInngestRoute
   ApiOperatorRoute: typeof ApiOperatorRoute
   ApiImagesEditsRoute: typeof ApiImagesEditsRoute
@@ -134,6 +159,13 @@ declare module '@tanstack/react-router' {
       path: '/api/chat'
       fullPath: '/api/chat'
       preLoaderRoute: typeof ApiChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/conversations': {
+      id: '/api/conversations'
+      path: '/api/conversations'
+      fullPath: '/api/conversations'
+      preLoaderRoute: typeof ApiConversationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/inngest': {
@@ -157,6 +189,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiImagesEditsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/chat/jobs/$jobId/events': {
+      id: '/api/chat/jobs/$jobId/events'
+      path: '/jobs/$jobId/events'
+      fullPath: '/api/chat/jobs/$jobId/events'
+      preLoaderRoute: typeof ApiChatJobsJobIdEventsRouteImport
+      parentRoute: typeof ApiChatRoute
+    }
     '/api/chat/jobs/$jobId/redirect': {
       id: '/api/chat/jobs/$jobId/redirect'
       path: '/jobs/$jobId/redirect'
@@ -175,11 +214,13 @@ declare module '@tanstack/react-router' {
 }
 
 interface ApiChatRouteChildren {
+  ApiChatJobsJobIdEventsRoute: typeof ApiChatJobsJobIdEventsRoute
   ApiChatJobsJobIdRedirectRoute: typeof ApiChatJobsJobIdRedirectRoute
   ApiChatJobsJobIdStopRoute: typeof ApiChatJobsJobIdStopRoute
 }
 
 const ApiChatRouteChildren: ApiChatRouteChildren = {
+  ApiChatJobsJobIdEventsRoute: ApiChatJobsJobIdEventsRoute,
   ApiChatJobsJobIdRedirectRoute: ApiChatJobsJobIdRedirectRoute,
   ApiChatJobsJobIdStopRoute: ApiChatJobsJobIdStopRoute,
 }
@@ -190,6 +231,7 @@ const ApiChatRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApiChatRoute: ApiChatRouteWithChildren,
+  ApiConversationsRoute: ApiConversationsRoute,
   ApiInngestRoute: ApiInngestRoute,
   ApiOperatorRoute: ApiOperatorRoute,
   ApiImagesEditsRoute: ApiImagesEditsRoute,
