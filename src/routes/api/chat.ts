@@ -1075,32 +1075,43 @@ export const Route = createFileRoute("/api/chat")({
     handlers: {
       POST: async ({ request }) => {
         try {
-          const config = requiredEnvironment();
+          requiredEnvironment();
           const body = await readRequest(request, request.signal);
           const history = validateClientHistory(body);
-          const taskId = randomUUID();
-          const start = performance.now();
-          const deadline = start + MAX_RUNTIME_MS;
-          const task = new AbortController();
-          const onDisconnect = () => task.abort(new AgentFault("CANCELLED", "A kapcsolat megszakadt.", 499));
-          request.signal.addEventListener("abort", onDisconnect, { once: true });
-          if (request.signal.aborted) onDisconnect();
-          const alarm = setTimeout(() => task.abort(new AgentFault("RUNTIME_LIMIT", "Lejárt a teljes feladathatáridő.", 408)), MAX_RUNTIME_MS);
+          const rawConversationId = object(body) && typeof body["conversation_id"] === "string" ? body["conversation_id"] : "";
+          const conversationId = /^[0-9a-fA-F-]{36}$/.test(rawConversationId) ? rawConversationId : randomUUID();
+          const jobId = randomUUID();
+          const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+          const firstUser = history.find((message) => message.role === "user");
+          const title = firstUser ? firstUser.content.replace(/\s+/g, " ").trim().slice(0, 80) : "Beszélgetés";
+          const now = new Date().toISOString();
+          await supabaseAdmin.from("chat_conversations").upsert({ id: conversationId, title, messages: history, updated_at: now }, { onConflict: "id" });
+          const { error: jobError } = await supabaseAdmin.from("chat_jobs").insert({ id: jobId, conversation_id: conversationId, history, status: "queued", created_at: now, updated_at: now });
+          if (jobError) throw new AgentFault("JOB_CREATE_FAILED", "A háttérmunka létrehozása sikertelen.", 500);
+          const { enqueueChatJob, followChatJob } = await import("@/lib/chat-jobs.server");
+          await enqueueChatJob(jobId);
+          const follower = followChatJob(jobId, 0, request.signal);
+          const encoder = new TextEncoder();
           const stream = new ReadableStream<Uint8Array>({
-            start(controller) {
-              const writer = new BoundedSse(controller, request.signal, deadline + CLEANUP_TIMEOUT_MS);
-              writer.startHeartbeat();
-              void agentRun(taskId, config, history, writer, task.signal, deadline, start)
-                .catch((error) => console.error(JSON.stringify({ kind: "chat_run_failure", task_id: taskId, code: error instanceof AgentFault ? error.code : "INTERNAL_ERROR" })))
-                .finally(async () => {
-                  clearTimeout(alarm);
-                  request.signal.removeEventListener("abort", onDisconnect);
-                  await writer.finish();
-                });
+            async start(controller) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "meta", conversation_id: conversationId, job_id: jobId })}\n\n`));
+              const reader = follower.getReader();
+              try {
+                for (;;) {
+                  const next = await reader.read();
+                  if (next.done) break;
+                  controller.enqueue(next.value);
+                }
+              } finally {
+                reader.releaseLock();
+                controller.close();
+              }
             },
-            cancel() { onDisconnect(); }
-          }, { highWaterMark: 4 });
-          return new Response(stream, { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "private, no-store, no-cache, no-transform", "X-Accel-Buffering": "no", Connection: "keep-alive" } });
+            cancel() {
+              follower.cancel().catch(() => undefined);
+            },
+          });
+          return new Response(stream, { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "private, no-store, no-cache, no-transform", "X-Accel-Buffering": "no", Connection: "keep-alive", "X-Chat-Job-Id": jobId } });
         } catch (error) {
           return jsonError(error);
         }
