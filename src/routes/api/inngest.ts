@@ -5,8 +5,7 @@ import { serve } from "inngest/edge";
 const inngest = new Inngest({ id: "orca-chat" });
 
 const chatRequested = inngest.createFunction(
-  { id: "orca-chat-requested", retries: 2 },
-  { event: "orca/chat.requested" },
+  { id: "orca-chat-requested", retries: 2, triggers: [{ event: "orca/chat.requested" }] },
   async ({ event, step }) => {
     const jobId = String((event.data as { jobId?: unknown })?.jobId ?? "");
     if (!jobId) return { status: "missing" };
