@@ -71,7 +71,7 @@ type Field =
   | { kind: "integer"; description: string; required: boolean; min: number; max: number; defaultValue?: number }
   | { kind: "string_array"; description: string; required: boolean; min: number; max: number; itemPattern: RegExp };
 type ToolSpec = { description: string; fields: Record<string, Field> };
-type ToolName = "run_shell" | "run_python" | "install_packages" | "write_file" | "read_file" | "expose_port" | "browse_url" | "update_plan" | "reason" | "update_state";
+type ToolName = "run_shell" | "run_python" | "install_packages" | "write_file" | "read_file" | "expose_port" | "browse_url" | "update_plan" | "reason" | "update_state" | "delegate_task" | "consult_advisor" | "multi_model_consensus";
 type Args = Record<string, unknown>;
 type ToolOutput = { status: ToolStatus; result: Record<string, unknown> };
 
@@ -94,7 +94,10 @@ const TOOL_SPECS: Record<ToolName, ToolSpec> = {
   browse_url: { description: "Valódi távoli böngészővel oldal navigálása és tartalmának lekérdezése, az engedélyezett HTTPS gazdagépekre korlátozva.", fields: { url: s("Engedélyezett HTTPS URL", 4096) } },
   update_plan: { description: "A feladat aktuális tervének és mérföldköveinek rögzítése a futó feladat állapotába.", fields: { plan: s("Teljes aktuális terv", MAX_PLAN_LENGTH) } },
   reason: { description: "Izolált rekurzív következtetés: összetett alproblémát fába bont, ágankénti alkérdéseket önállóan megvizsgál és összefoglal, a feladat globális állapotának módosítása nélkül.", fields: { question: s("A vizsgálandó összetett kérdés", 8_000), depth: n("Rekurziós mélység 1-3", 1, 3, false, 2), branches: n("Ágak száma szintenként 1-3", 1, 3, false, 2) } },
-  update_state: { description: "A munkamemória (Σ) frissítése: tény rögzítése, blokkoló felvétele vagy feloldása, részcél lezárása azonosító alapján.", fields: { fact: s("Új ellenőrzött tény", 400, false), blocker: s("Új blokkoló", 400, false), resolve_blocker: s("Feloldott blokkoló szövegrészlete", 400, false), complete_subgoal: s("Lezárt részcél azonosítója", 100, false) } }
+  update_state: { description: "A munkamemória (Σ) frissítése: tény rögzítése, blokkoló felvétele vagy feloldása, részcél lezárása azonosító alapján.", fields: { fact: s("Új ellenőrzött tény", 400, false), blocker: s("Új blokkoló", 400, false), resolve_blocker: s("Feloldott blokkoló szövegrészlete", 400, false), complete_subgoal: s("Lezárt részcél azonosítója", 100, false) } },
+  delegate_task: { description: "Részfeladat kiadása gyors Gemini alügynöknek, amely önállóan kódot futtat, Google-ben keres és URL-eket olvas, majd ellenőrzött eredményt ad vissza.", fields: { task: s("A pontosan megfogalmazott részfeladat", 32_000), context: s("A részfeladathoz szükséges háttér", 32_000, false) } },
+  consult_advisor: { description: "Erősebb Gemini modell megkérdezése tanácsért: elemzi a helyzetet, hibákat és kockázatokat jelez, és konkrét továbblépést javasol.", fields: { question: s("A tanácsadónak feltett kérdés", 16_000), context: s("Az eddigi állapot, próbálkozások és eredmények", 32_000, false) } },
+  multi_model_consensus: { description: "Ugyanazt a kérdést több Gemini modell egymástól függetlenül megválaszolja, majd egy erős modell összeveti a válaszokat és konszenzust, eltéréseket és bizonyossági szintet ad.", fields: { question: s("Az elemzendő kérdés", 16_000), context: s("Háttérinformáció", 32_000, false) } }
 };
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -648,7 +651,14 @@ function sanitizeResult(result: ToolOutput): { status: ToolStatus; content: stri
   return { status: result.status, content: JSON.stringify({ status: result.status, truncated: true, original_bytes: size, message: "A teljes eredmény nagyobb, mint a modell megjelenítési költségkerete. A fájlokhoz a read_file lapozását használd.", preview: value.slice(0, 2_000) }) };
 }
 
-async function executeTool(name: ToolName, args: Args, sandbox: Sandbox | null, planState: { plan: string }, emitPlan: (plan: string) => Promise<void>): Promise<ToolOutput> {
+async function executeTool(name: ToolName, args: Args, sandbox: Sandbox | null, planState: { plan: string }, emitPlan: (plan: string) => Promise<void>, signal: AbortSignal): Promise<ToolOutput> {
+  if (name === "delegate_task" || name === "consult_advisor" || name === "multi_model_consensus") {
+    const sub = await import("@/lib/subagents.server");
+    const context = typeof args.context === "string" ? args.context : "";
+    if (name === "delegate_task") return sub.delegateTask(asString(args.task, "task"), context, signal);
+    if (name === "consult_advisor") return sub.consultAdvisor(asString(args.question, "question"), context, signal);
+    return sub.multiModelConsensus(asString(args.question, "question"), context, signal);
+  }
   if (name === "update_plan") {
     const plan = asString(args.plan, "plan");
     planState.plan = plan;
@@ -851,7 +861,7 @@ async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMess
   const objective = [...history].reverse().find((m) => m.role === "user")?.content ?? "";
   const startedAt = new Date().toISOString();
   const plan = { plan: "" };
-  const enabled: ToolName[] = config.instaKey ? Object.keys(TOOL_SPECS).filter(isToolName) : ["update_plan", "reason", "update_state"];
+  const enabled: ToolName[] = config.instaKey ? Object.keys(TOOL_SPECS).filter(isToolName) : ["update_plan", "reason", "update_state", "delegate_task", "consult_advisor", "multi_model_consensus"];
   const tools = providerTools(enabled);
   const sandbox = config.instaKey ? new Sandbox(config.instaKey, config, signal, deadline) : null;
   let steps = 0;
@@ -1005,7 +1015,7 @@ async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMess
             sigma = cog.applyStateUpdate(sigma, args);
             result = { status: "completed", result: { subgoals: sigma.subgoals, closed_subgoals: sigma.closed_subgoals, facts: sigma.facts, blockers: sigma.blockers } };
           } else {
-            result = await executeTool(call.function.name, args, sandbox, plan, (value) => stream.send({ type: "agent_event", task_id: taskId, step: steps, event: { type: "plan_update", plan: value } }));
+            result = await executeTool(call.function.name, args, sandbox, plan, (value) => stream.send({ type: "agent_event", task_id: taskId, step: steps, event: { type: "plan_update", plan: value } }), signal);
           }
         } catch (error) {
           if (signal.aborted) throw abortFault(signal);
