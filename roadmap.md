@@ -10,3 +10,5 @@
 - [ ] Verify the full visible chat: blocked by browser rendering stalls in the uploaded page.- [x] Current time always in model context (system prompt)
 - [x] InstaVM tools: shell, python, Nix install, files, public port URL, browser
 - [ ] Remaining InstaVM features from uploaded list (snapshots, clones, volumes, vaults, PTY): not wired as chat tools yet
+- [x] Gemini subagent tools: delegate_task, consult_advisor, multi_model_consensus
+- [ ] Live Gemini subagent test: blocked by Google quota on the provided GEMINI_API_KEY (429)
