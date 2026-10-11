@@ -879,15 +879,22 @@ async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMess
   let reason = "A feladat befejezése nem ellenőrzött.";
   let terminalSent = false;
   let verified = false;
-  const think: Think = async (system, user) => {
-    const upstream = await callModel(config, [{ role: "system", content: system }, { role: "user", content: user }], [], signal, deadline);
-    await stream.send({ type: "delta", task_id: taskId, step: steps, reasoning_content: "\n\n── Kognitív feldolgozás ──\n" });
+  const planAbort = new AbortController();
+  const stopPlanning = () => planAbort.abort(signal.reason);
+  if (signal.aborted) stopPlanning(); else signal.addEventListener("abort", stopPlanning, { once: true });
+  let answered = false;
+  const makeThink = (sig: AbortSignal, visible: boolean): Think => async (system, user) => {
+    const upstream = await callModel(config, [{ role: "system", content: system }, { role: "user", content: user }], [], sig, deadline);
+    if (visible && !answered) await stream.send({ type: "delta", task_id: taskId, step: steps, reasoning_content: "\n\n── Kognitív feldolgozás ──\n" });
     return (await receiveModel(upstream, taskId, steps, async (event) => {
-      if (event.type !== "delta") return;
+      if (!visible || answered || event.type !== "delta") return;
       const text = event.reasoning_content ?? event.content;
       if (text) await stream.send({ type: "delta", task_id: taskId, step: steps, reasoning_content: text });
-    }, signal)).content;
+    }, sig)).content;
   };
+  const think = makeThink(signal, true);
+  const planThink = makeThink(planAbort.signal, true);
+  const quietThink = makeThink(signal, false);
   const probe = sandbox ? async (command: string) => (await sandbox.exec(command, "bash", 30)).status === "completed" : null;
   let noteSeq = 0;
   const note = async (label: string, detail: string) => {
