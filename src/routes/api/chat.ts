@@ -688,6 +688,7 @@ function systemPrompt(config: RuntimeConfig, plan: string, startedAt: string, co
     "A feladathoz tartozó legfrissebb terv:",
     plan || "Még nincs terv.",
     cognition,
+    "Alügynökök: delegate_task gyors Gemini modellnek ad ki önálló részfeladatot (kód, keresés, URL), consult_advisor erősebb modelltől kér tanácsot elakadáskor vagy fontos döntés előtt, multi_model_consensus több modell független válaszát veti össze vitatott vagy kritikus kérdésekben. Párhuzamosan is hívhatod őket.",
     config.instaKey ? "Elérhető egy feladathoz rendelt InstaVM VM shell, Python, Nix, fájl, port és böngésző eszközökkel. A VM a feladat végén leáll, a fájlok nem tartósak." : "Nem érhető el Linux VM, Python, fájlrendszer, böngésző vagy porttovábbítás. Kizárólag a tervező eszköz működik."
   ].join("\n");
 }
