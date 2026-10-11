@@ -23,7 +23,7 @@ async function call(path: string, method: string, body: unknown, signal: AbortSi
   const response = await fetch(`${API_URL}${path}`, {
     method,
     headers: { "X-Browser-Use-API-Key": apiKey(), "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? null : JSON.stringify(body),
     signal,
   });
   const text = await response.text();
