@@ -71,7 +71,7 @@ type Field =
   | { kind: "integer"; description: string; required: boolean; min: number; max: number; defaultValue?: number }
   | { kind: "string_array"; description: string; required: boolean; min: number; max: number; itemPattern: RegExp };
 type ToolSpec = { description: string; fields: Record<string, Field> };
-type ToolName = "run_shell" | "run_python" | "install_packages" | "write_file" | "read_file" | "expose_port" | "browse_url" | "update_plan" | "reason" | "update_state" | "delegate_task" | "consult_advisor" | "multi_model_consensus";
+type ToolName = "run_shell" | "run_python" | "install_packages" | "write_file" | "read_file" | "expose_port" | "browse_url" | "update_plan" | "reason" | "update_state" | "delegate_task" | "consult_advisor" | "multi_model_consensus" | "cloud_browser_start" | "cloud_browser_stop";
 type Args = Record<string, unknown>;
 type ToolOutput = { status: ToolStatus; result: Record<string, unknown> };
 
@@ -97,7 +97,9 @@ const TOOL_SPECS: Record<ToolName, ToolSpec> = {
   update_state: { description: "A munkamemória (Σ) frissítése: tény rögzítése, blokkoló felvétele vagy feloldása, részcél lezárása azonosító alapján.", fields: { fact: s("Új ellenőrzött tény", 400, false), blocker: s("Új blokkoló", 400, false), resolve_blocker: s("Feloldott blokkoló szövegrészlete", 400, false), complete_subgoal: s("Lezárt részcél azonosítója", 100, false) } },
   delegate_task: { description: "Részfeladat kiadása gyors Gemini alügynöknek, amely önállóan kódot futtat, Google-ben keres és URL-eket olvas, majd ellenőrzött eredményt ad vissza.", fields: { task: s("A pontosan megfogalmazott részfeladat", 32_000), context: s("A részfeladathoz szükséges háttér", 32_000, false) } },
   consult_advisor: { description: "Erősebb Gemini modell megkérdezése tanácsért: elemzi a helyzetet, hibákat és kockázatokat jelez, és konkrét továbblépést javasol.", fields: { question: s("A tanácsadónak feltett kérdés", 16_000), context: s("Az eddigi állapot, próbálkozások és eredmények", 32_000, false) } },
-  multi_model_consensus: { description: "Ugyanazt a kérdést több Gemini modell egymástól függetlenül megválaszolja, majd egy erős modell összeveti a válaszokat és konszenzust, eltéréseket és bizonyossági szintet ad.", fields: { question: s("Az elemzendő kérdés", 16_000), context: s("Háttérinformáció", 32_000, false) } }
+  multi_model_consensus: { description: "Ugyanazt a kérdést több Gemini modell egymástól függetlenül megválaszolja, majd egy erős modell összeveti a válaszokat és konszenzust, eltéréseket és bizonyossági szintet ad.", fields: { question: s("Az elemzendő kérdés", 16_000), context: s("Háttérinformáció", 32_000, false) } },
+  cloud_browser_start: { description: "Felügyelt Chrome indítása a Browser Use Cloudban proxyval, felvétellel, legfeljebb 4 órára. Visszaadja a CDP websocket címet, amelyre a VM-ből Playwright connect_over_cdp hívással csatlakozhatsz, és az élő nézet URL-jét.", fields: { country_code: s("Proxy ország kód, alapértelmezés us", 8, false), timeout_minutes: { type: "integer", description: "Futási idő percben, 1-240, alapértelmezés 240" } } },
+  cloud_browser_stop: { description: "A felhőböngésző leállítása és a felvétel URL-jének lekérése. Minden elindított böngészőt állíts le, ha végeztél vele.", fields: { browser_id: s("A cloud_browser_start által visszaadott azonosító", 200) } }
 };
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -659,6 +661,11 @@ async function executeTool(name: ToolName, args: Args, sandbox: Sandbox | null, 
     if (name === "consult_advisor") return sub.consultAdvisor(asString(args.question, "question"), context, signal);
     return sub.multiModelConsensus(asString(args.question, "question"), context, signal);
   }
+  if (name === "cloud_browser_start" || name === "cloud_browser_stop") {
+    const cloud = await import("@/lib/cloud-browser.server");
+    if (name === "cloud_browser_start") return cloud.startCloudBrowser(typeof args.country_code === "string" ? args.country_code.toLowerCase() : "us", typeof args.timeout_minutes === "number" ? Math.trunc(args.timeout_minutes) : 240, signal);
+    return cloud.stopCloudBrowser(asString(args.browser_id, "browser_id"), signal);
+  }
   if (name === "update_plan") {
     const plan = asString(args.plan, "plan");
     planState.plan = plan;
@@ -689,6 +696,7 @@ function systemPrompt(config: RuntimeConfig, plan: string, startedAt: string, co
     plan || "Még nincs terv.",
     cognition,
     "Alügynökök: delegate_task gyors Gemini modellnek ad ki önálló részfeladatot (kód, keresés, URL), consult_advisor erősebb modelltől kér tanácsot elakadáskor vagy fontos döntés előtt, multi_model_consensus több modell független válaszát veti össze vitatott vagy kritikus kérdésekben. Párhuzamosan is hívhatod őket.",
+    "Felhőböngésző: cloud_browser_start valódi, proxyzott Chrome-ot indít a Browser Use Cloudban; a kapott cdp_url-re a VM-ből Python Playwrighttal csatlakozz (connect_over_cdp), az élő nézet URL-jét add meg a felhasználónak. Védett, JavaScript-igényes vagy bejelentkezést kívánó oldalakhoz használd. Végén mindig hívd a cloud_browser_stop eszközt, és add meg a felvétel linkjét.",
     config.instaKey ? "Elérhető egy feladathoz rendelt InstaVM VM shell, Python, Nix, fájl, port és böngésző eszközökkel. A VM a feladat végén leáll, a fájlok nem tartósak." : "Nem érhető el Linux VM, Python, fájlrendszer, böngésző vagy porttovábbítás. Kizárólag a tervező eszköz működik."
   ].join("\n");
 }
@@ -862,7 +870,7 @@ async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMess
   const objective = [...history].reverse().find((m) => m.role === "user")?.content ?? "";
   const startedAt = new Date().toISOString();
   const plan = { plan: "" };
-  const enabled: ToolName[] = config.instaKey ? Object.keys(TOOL_SPECS).filter(isToolName) : ["update_plan", "reason", "update_state", "delegate_task", "consult_advisor", "multi_model_consensus"];
+  const enabled: ToolName[] = config.instaKey ? Object.keys(TOOL_SPECS).filter(isToolName) : ["update_plan", "reason", "update_state", "delegate_task", "consult_advisor", "multi_model_consensus", "cloud_browser_start", "cloud_browser_stop"];
   const tools = providerTools(enabled);
   const sandbox = config.instaKey ? new Sandbox(config.instaKey, config, signal, deadline) : null;
   let steps = 0;
@@ -1054,6 +1062,7 @@ async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMess
     reason = fault.message;
     if (outcome !== "cancelled") await stream.send({ type: "error", task_id: taskId, code: fault.code, message: fault.message }).catch(() => undefined);
   } finally {
+    await import("@/lib/cloud-browser.server").then((cloud) => cloud.stopAllCloudBrowsers(signal)).catch(() => undefined);
     try { await sandbox?.close(); }
     catch (error) {
       console.error(JSON.stringify({ kind: "chat_cleanup_failed", task_id: taskId, code: error instanceof AgentFault ? error.code : "CLEANUP_FAILED" }));
