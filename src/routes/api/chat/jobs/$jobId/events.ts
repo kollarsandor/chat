@@ -11,7 +11,7 @@ export const Route = createFileRoute("/api/chat/jobs/$jobId/events")({
         }
         const url = new URL(request.url);
         const after = Math.max(0, parseInt(url.searchParams.get("after") ?? "0", 10) || 0);
-        const stream = followChatJob(jobId, after, request.signal);
+        const stream = followChatJob(jobId, after, request.signal, request.url);
         return new Response(stream, {
           headers: {
             "Content-Type": "text/event-stream; charset=utf-8",
