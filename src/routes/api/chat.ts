@@ -950,8 +950,24 @@ async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMess
   let replans = 0;
   try {
     await lifecycle.to("osDeliberate");
-    await replan();
+    startDeliberation();
     await lifecycle.to("osAct");
+    try {
+      const quickUpstream = await callModel(config, [
+        { role: "system", content: "Adj azonnali, rövid, lényegre törő választ a felhasználó kérdésére magyarul, legfeljebb 3-4 mondatban. Ne tervezz, ne használj eszközöket, csak válaszolj közvetlenül. A részletes, ellenőrzött kidolgozás utána következik." },
+        ...history.slice(-6)
+      ], [], signal, deadline);
+      const quick = await receiveModel(quickUpstream, taskId, steps, async (ev) => {
+        if (ev.type === "delta" && ev.content) await stream.send({ type: "delta", task_id: taskId, step: steps, content: ev.content });
+      }, signal);
+      if (quick.content.trim()) {
+        answered = true;
+        await stream.send({ type: "delta", task_id: taskId, step: steps, content: "\n\n── Részletes kidolgozás ──\n" });
+        messages.push({ role: "assistant", content: quick.content });
+        messages.push({ role: "user", content: "[Rendszerüzenet] A gyors válasz elkészült. Most dolgozd ki a részletes, ellenőrzött választ a tervezett lépések szerint, és javítsd vagy egészítsd ki a fenti rövid választ, ha szükséges." });
+      }
+    } catch { answered = false; }
+    await applyDeliberation(false);
     for (; steps < MAX_STEPS; steps++) {
       remaining(deadline, signal);
       const operator = await cog.takeOperatorMessages(taskId).catch(() => [] as string[]);
