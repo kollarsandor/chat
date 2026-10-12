@@ -305,7 +305,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      kick_chat_worker: {
+        Args: { _base_url: string; _job_id: string }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never

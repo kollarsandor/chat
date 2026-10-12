@@ -1115,10 +1115,9 @@ export const Route = createFileRoute("/api/chat")({
           await supabaseAdmin.from("chat_conversations").upsert({ id: conversationId, title, messages: history, updated_at: now }, { onConflict: "id" });
           const { error: jobError } = await supabaseAdmin.from("chat_jobs").insert({ id: jobId, conversation_id: conversationId, history, status: "queued", created_at: now, updated_at: now });
           if (jobError) throw new AgentFault("JOB_CREATE_FAILED", "A háttérmunka létrehozása sikertelen.", 500);
-          const { enqueueChatJob, executeChatJob, followChatJob } = await import("@/lib/chat-jobs.server");
-          await enqueueChatJob(jobId);
-          executeChatJob(jobId).catch(() => undefined);
-          const follower = followChatJob(jobId, 0, request.signal);
+          const { dispatchChatJob, followChatJob } = await import("@/lib/chat-jobs.server");
+          await dispatchChatJob(jobId, request.url);
+          const follower = followChatJob(jobId, 0, request.signal, request.url);
           const encoder = new TextEncoder();
           const stream = new ReadableStream<Uint8Array>({
             async start(controller) {

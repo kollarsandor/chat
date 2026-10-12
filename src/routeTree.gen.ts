@@ -12,9 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiConversationsRouteImport } from './routes/api/conversations'
-import { Route as ApiInngestRouteImport } from './routes/api/inngest'
 import { Route as ApiOperatorRouteImport } from './routes/api/operator'
 import { Route as ApiImagesEditsRouteImport } from './routes/api/images/edits'
+import { Route as ApiPublicChatWorkerRouteImport } from './routes/api/public/chat-worker'
 import { Route as ApiChatJobsJobIdEventsRouteImport } from './routes/api/chat/jobs/$jobId/events'
 import { Route as ApiChatJobsJobIdRedirectRouteImport } from './routes/api/chat/jobs/$jobId/redirect'
 import { Route as ApiChatJobsJobIdStopRouteImport } from './routes/api/chat/jobs/$jobId/stop'
@@ -34,11 +34,6 @@ const ApiConversationsRoute = ApiConversationsRouteImport.update({
   path: '/api/conversations',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiInngestRoute = ApiInngestRouteImport.update({
-  id: '/api/inngest',
-  path: '/api/inngest',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiOperatorRoute = ApiOperatorRouteImport.update({
   id: '/api/operator',
   path: '/api/operator',
@@ -47,6 +42,11 @@ const ApiOperatorRoute = ApiOperatorRouteImport.update({
 const ApiImagesEditsRoute = ApiImagesEditsRouteImport.update({
   id: '/api/images/edits',
   path: '/api/images/edits',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicChatWorkerRoute = ApiPublicChatWorkerRouteImport.update({
+  id: '/api/public/chat-worker',
+  path: '/api/public/chat-worker',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiChatJobsJobIdEventsRoute = ApiChatJobsJobIdEventsRouteImport.update({
@@ -70,9 +70,9 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/api/chat': typeof ApiChatRouteWithChildren
   '/api/conversations': typeof ApiConversationsRoute
-  '/api/inngest': typeof ApiInngestRoute
   '/api/operator': typeof ApiOperatorRoute
   '/api/images/edits': typeof ApiImagesEditsRoute
+  '/api/public/chat-worker': typeof ApiPublicChatWorkerRoute
   '/api/chat/jobs/$jobId/events': typeof ApiChatJobsJobIdEventsRoute
   '/api/chat/jobs/$jobId/redirect': typeof ApiChatJobsJobIdRedirectRoute
   '/api/chat/jobs/$jobId/stop': typeof ApiChatJobsJobIdStopRoute
@@ -81,9 +81,9 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/chat': typeof ApiChatRouteWithChildren
   '/api/conversations': typeof ApiConversationsRoute
-  '/api/inngest': typeof ApiInngestRoute
   '/api/operator': typeof ApiOperatorRoute
   '/api/images/edits': typeof ApiImagesEditsRoute
+  '/api/public/chat-worker': typeof ApiPublicChatWorkerRoute
   '/api/chat/jobs/$jobId/events': typeof ApiChatJobsJobIdEventsRoute
   '/api/chat/jobs/$jobId/redirect': typeof ApiChatJobsJobIdRedirectRoute
   '/api/chat/jobs/$jobId/stop': typeof ApiChatJobsJobIdStopRoute
@@ -93,9 +93,9 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/api/chat': typeof ApiChatRouteWithChildren
   '/api/conversations': typeof ApiConversationsRoute
-  '/api/inngest': typeof ApiInngestRoute
   '/api/operator': typeof ApiOperatorRoute
   '/api/images/edits': typeof ApiImagesEditsRoute
+  '/api/public/chat-worker': typeof ApiPublicChatWorkerRoute
   '/api/chat/jobs/$jobId/events': typeof ApiChatJobsJobIdEventsRoute
   '/api/chat/jobs/$jobId/redirect': typeof ApiChatJobsJobIdRedirectRoute
   '/api/chat/jobs/$jobId/stop': typeof ApiChatJobsJobIdStopRoute
@@ -106,9 +106,9 @@ export interface FileRouteTypes {
     | '/'
     | '/api/chat'
     | '/api/conversations'
-    | '/api/inngest'
     | '/api/operator'
     | '/api/images/edits'
+    | '/api/public/chat-worker'
     | '/api/chat/jobs/$jobId/events'
     | '/api/chat/jobs/$jobId/redirect'
     | '/api/chat/jobs/$jobId/stop'
@@ -117,9 +117,9 @@ export interface FileRouteTypes {
     | '/'
     | '/api/chat'
     | '/api/conversations'
-    | '/api/inngest'
     | '/api/operator'
     | '/api/images/edits'
+    | '/api/public/chat-worker'
     | '/api/chat/jobs/$jobId/events'
     | '/api/chat/jobs/$jobId/redirect'
     | '/api/chat/jobs/$jobId/stop'
@@ -128,9 +128,9 @@ export interface FileRouteTypes {
     | '/'
     | '/api/chat'
     | '/api/conversations'
-    | '/api/inngest'
     | '/api/operator'
     | '/api/images/edits'
+    | '/api/public/chat-worker'
     | '/api/chat/jobs/$jobId/events'
     | '/api/chat/jobs/$jobId/redirect'
     | '/api/chat/jobs/$jobId/stop'
@@ -140,9 +140,9 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApiChatRoute: typeof ApiChatRouteWithChildren
   ApiConversationsRoute: typeof ApiConversationsRoute
-  ApiInngestRoute: typeof ApiInngestRoute
   ApiOperatorRoute: typeof ApiOperatorRoute
   ApiImagesEditsRoute: typeof ApiImagesEditsRoute
+  ApiPublicChatWorkerRoute: typeof ApiPublicChatWorkerRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -168,13 +168,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiConversationsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/inngest': {
-      id: '/api/inngest'
-      path: '/api/inngest'
-      fullPath: '/api/inngest'
-      preLoaderRoute: typeof ApiInngestRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/operator': {
       id: '/api/operator'
       path: '/api/operator'
@@ -187,6 +180,13 @@ declare module '@tanstack/react-router' {
       path: '/api/images/edits'
       fullPath: '/api/images/edits'
       preLoaderRoute: typeof ApiImagesEditsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/chat-worker': {
+      id: '/api/public/chat-worker'
+      path: '/api/public/chat-worker'
+      fullPath: '/api/public/chat-worker'
+      preLoaderRoute: typeof ApiPublicChatWorkerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/chat/jobs/$jobId/events': {
@@ -232,9 +232,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApiChatRoute: ApiChatRouteWithChildren,
   ApiConversationsRoute: ApiConversationsRoute,
-  ApiInngestRoute: ApiInngestRoute,
   ApiOperatorRoute: ApiOperatorRoute,
   ApiImagesEditsRoute: ApiImagesEditsRoute,
+  ApiPublicChatWorkerRoute: ApiPublicChatWorkerRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
