@@ -1,6 +1,6 @@
 # Chat streaming
-- [ ] Move chat execution to durable background jobs and restore replies after reload or browser closure.
-- [ ] Implement browser-independent continuation without requiring Inngest unless the hosting runtime makes it unavoidable.
+- [x] Move chat execution to durable background jobs and restore replies after reload or browser closure.
+- [x] Browser-independent continuation via own worker route (Inngest removed).
 - [x] Integrate the selected FlyMyAI image model into existing image controls and check a real request (HTTP 200, one image, client stream parser confirmed).
 - [x] Restore complete provider and cognitive text in the thinking panel and verify live streaming (2629 fragments, 22235 characters).
 - [x] Stream model text and reasoning throughout every tool step.
