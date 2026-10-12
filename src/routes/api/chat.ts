@@ -961,7 +961,6 @@ async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMess
         if (ev.type === "delta" && ev.content) await stream.send({ type: "delta", task_id: taskId, step: steps, content: ev.content });
       }, signal);
       if (quick.content.trim()) {
-        answered = true;
         await stream.send({ type: "delta", task_id: taskId, step: steps, content: "\n\n── Részletes kidolgozás ──\n" });
         messages.push({ role: "assistant", content: quick.content });
         messages.push({ role: "user", content: "[Rendszerüzenet] A gyors válasz elkészült. Most dolgozd ki a részletes, ellenőrzött választ a tervezett lépések szerint, és javítsd vagy egészítsd ki a fenti rövid választ, ha szükséges." });
