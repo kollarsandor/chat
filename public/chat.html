@@ -6959,7 +6959,7 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
       var display = contentToDisplay(parsed.content);
       var branchNav = branchNavHtml(messageIndex);
       if(user){
-        var textBubble = display.text ? '<div class="bubble lg user-message-collapsible"><div class="user-message-text">' + markdown(display.text) + '</div></div>' : '';
+        var textBubble = display.text ? '<div class="bubble lg user-message-collapsible"><div class="user-message-text">' + markdown(display.text) + '</div><button type="button" class="user-message-expand" data-expand-index="' + messageIndex + '">Teljes üzenet</button></div>' : '';
         return '<div class="msg-group u" role="listitem">' + renderMessageImages(display.images, messageIndex, false) + renderTextFiles(display.textFiles, messageIndex) + textBubble + '<div class="msg-actions"><button type="button" class="msg-edit" data-edit-index="' + messageIndex + '">Szerkesztés</button></div>' + branchNav + '</div>';
       }
       var thinking = parsed.thinking;
@@ -6974,6 +6974,25 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
       var actions = copyButton || regenerateButton ? '<div class="msg-actions work-message-actions">' + copyButton + regenerateButton + '</div>' : '';
       return '<div class="msg-group a" role="listitem">' + thinkingHtml + toolActivity + pending + body + renderMessageImages(display.images, messageIndex, !!message.generatedImagePresentation) + actions + branchNav + '</div>';
     }).join("");
+    var active = activeBranch();
+    if(active && typeof active.forkIndex === "number" && active.forkIndex === messages.length){
+      var trailingNav = branchNavHtml(active.forkIndex);
+      if(trailingNav) messageList.insertAdjacentHTML("beforeend", '<div class="msg-group u" role="listitem">' + trailingNav + '</div>');
+    }
+    messageList.querySelectorAll(".user-message-collapsible").forEach(function(bubble){
+      var text = bubble.querySelector(".user-message-text");
+      if(text && text.scrollHeight > text.clientHeight + 4) bubble.classList.add("can-collapse");
+    });
+    messageList.querySelectorAll(".user-message-expand").forEach(function(button){
+      if(button._bound) return;
+      button._bound = true;
+      button.addEventListener("click", function(){
+        var bubble = button.closest(".user-message-collapsible");
+        if(!bubble) return;
+        var expanded = bubble.classList.toggle("is-expanded");
+        button.textContent = expanded ? "Összecsukás" : "Teljes üzenet";
+      });
+    });
     bindRichContent();
     updateScrollButton();
     if(nearBottom && scrollArea) scrollArea.scrollTop = scrollArea.scrollHeight;
