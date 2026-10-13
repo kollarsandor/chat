@@ -377,8 +377,18 @@ textarea{ border-radius: 0; }
   text-underline-offset: 2px;
   cursor: pointer;
 }
-.user-message-collapsible.can-collapse .user-message-expand{
+ .user-message-collapsible.can-collapse .user-message-expand{
   display: block;
+}
+.edit-banner{
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin: 0 0 8px; padding: 7px 12px; border-radius: 12px;
+  border: 1px solid var(--sep); background: rgba(255,255,255,.05);
+  color: var(--fg2); font-size: 12px;
+}
+.edit-banner button{
+  border: 0; background: transparent; color: var(--fg); font: inherit; font-size: 12px;
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer; padding: 2px 4px;
 }
 .ai-bubble{ padding: 4px 0; background: transparent; border: none; box-shadow: none; }
 .thinking{
@@ -6840,13 +6850,68 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
     });
   }
 
+  var editSession = null;
+
+  function showEditBanner(){
+    hideEditBanner();
+    var host = textarea.closest(".ibox") || textarea.parentElement;
+    if(!host) return;
+    var banner = document.createElement("div");
+    banner.className = "edit-banner";
+    banner.id = "edit-banner";
+    banner.innerHTML = '<span>Üzenet szerkesztése — új ág készül</span><button type="button" id="edit-cancel">Mégse</button>';
+    host.parentElement.insertBefore(banner, host);
+    banner.querySelector("#edit-cancel").addEventListener("click", cancelEdit);
+  }
+
+  function hideEditBanner(){
+    var banner = document.getElementById("edit-banner");
+    if(banner) banner.remove();
+  }
+
+  function cancelEdit(){
+    if(!editSession){ hideEditBanner(); return; }
+    var snapshot = editSession;
+    editSession = null;
+    var child = branches.filter(function(item){ return item.id === snapshot.childBranchId; })[0];
+    if(child && !child.messages.length){
+      branches = branches.filter(function(item){ return item.id !== snapshot.childBranchId; });
+    }
+    var parent = branches.filter(function(item){ return item.id === snapshot.parentBranchId; })[0];
+    if(parent){
+      activeBranchId = parent.id;
+      messages = parent.messages.slice();
+    } else {
+      activeBranchId = snapshot.parentBranchId;
+      messages = snapshot.parentMessages.slice();
+    }
+    textarea.value = snapshot.text;
+    selectedImages = snapshot.images.slice();
+    selectedTextFiles = snapshot.textFiles.slice();
+    updateImgStrip();
+    textarea.dispatchEvent(new Event("input", {bubbles:true}));
+    hideEditBanner();
+    render();
+    persistCurrent();
+    toast("Szerkesztés visszavonva", "ok");
+  }
+
   function beginEdit(index){
     if(busy && abortController){ stopActiveBackendJob(); abortController.abort(); }
     var source = messages[index];
     if(!source || source.role !== "user") return;
+    if(editSession) cancelEdit();
     syncActiveBranch();
     var display = contentToDisplay(source.content);
     var child = {id:branchId(), label:"Szerkesztett ág", parentBranchId:activeBranchId, forkIndex:index, messages:messages.slice(0, index)};
+    editSession = {
+      childBranchId: child.id,
+      parentBranchId: activeBranchId,
+      parentMessages: messages.slice(),
+      text: textarea.value,
+      images: selectedImages.slice(),
+      textFiles: selectedTextFiles.slice()
+    };
     branches.push(child);
     activeBranchId = child.id;
     messages = child.messages.slice();
@@ -6856,6 +6921,7 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
     updateImgStrip();
     textarea.dispatchEvent(new Event("input", {bubbles:true}));
     render();
+    showEditBanner();
     textarea.focus();
     persistCurrent();
     toast("Új ág létrehozva", "ok");
