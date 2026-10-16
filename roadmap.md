@@ -1,4 +1,5 @@
 # Chat streaming
+- [ ] Add real live cloud browser canvas and human takeover, verify with an actual cloud browser.
 - [x] Move chat execution to durable background jobs and restore replies after reload or browser closure.
 - [x] Browser-independent continuation via own worker route (Inngest removed).
 - [x] Integrate the selected FlyMyAI image model into existing image controls and check a real request (HTTP 200, one image, client stream parser confirmed).

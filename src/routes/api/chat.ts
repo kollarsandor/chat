@@ -871,7 +871,7 @@ function systemPrompt(enabled: readonly ToolName[], plan: string, startedAt: str
   }
   if (has("cloud_browser_start")) {
     lines.push(vm
-      ? "Felhőböngésző: cloud_browser_start valódi, proxyzott Chrome-ot indít a Browser Use Cloudban; a kapott cdp_url-re a VM-ből Python Playwrighttal csatlakozz (connect_over_cdp), az élő nézet URL-jét add meg a felhasználónak. Védett, JavaScript-igényes vagy bejelentkezést kívánó oldalakhoz használd. Végén mindig hívd a cloud_browser_stop eszközt, és add meg a felvétel linkjét."
+      ? "Felhőböngésző: cloud_browser_start valódi, proxyzott Chrome-ot indít a Browser Use Cloudban; a kapott cdp_url-re a VM-ből Python Playwrighttal csatlakozz (connect_over_cdp), a frontend automatikusan megjeleníti az élő képernyőt. Minden egyes böngészőműveletet külön, rövid run_python hívásban végezz, hogy a felhasználó átvehessen az irányítást. A böngésző natív nézete 1280×1029; ne módosítsd. Védett, JavaScript-igényes vagy bejelentkezést kívánó oldalakhoz használd. Végén mindig hívd a cloud_browser_stop eszközt, és add meg a felvétel linkjét."
       : "Felhőböngésző: cloud_browser_start valódi, proxyzott Chrome-ot indít a Browser Use Cloudban. Linux VM hiányában a CDP címre nem tudsz programból csatlakozni; az élő nézet URL-jét add meg a felhasználónak. Végén mindig hívd a cloud_browser_stop eszközt, és add meg a felvétel linkjét.");
   }
   if (vm) {
@@ -1151,6 +1151,7 @@ function formatReflection(reflection: Reflection): string {
 
 async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMessage[], stream: AgentSink, signal: AbortSignal, deadline: number, started: number): Promise<void> {
   const cog = await import("@/lib/cognitive.server");
+  const browserControl = await import("@/lib/cloud-browser.server");
   const objective = [...history].reverse().find((m) => m.role === "user")?.content ?? "";
   const startedAt = new Date().toISOString();
   const plan = { plan: "" };
@@ -1259,6 +1260,8 @@ async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMess
     await applyDeliberation(false);
     for (; steps < MAX_STEPS; steps++) {
       remaining(deadline, signal);
+      await browserControl.waitForBrowserControl(taskId, signal);
+      await browserControl.setBrowserAgentBusy(taskId, false);
       const operator = await cog.takeOperatorMessages(taskId).catch(() => [] as string[]);
       if (operator.length) {
         for (const text of operator) {
@@ -1320,6 +1323,7 @@ async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMess
       messages.push({ role: "assistant", content: received.content, tool_calls: received.calls });
       for (const call of received.calls) {
         remaining(deadline, signal);
+        await browserControl.waitForBrowserControl(taskId, signal);
         callCount++;
         const actionText = `${call.function.name} ${call.function.arguments}`.slice(0, 2000);
         await stream.send({ type: "agent_event", task_id: taskId, step: steps, event: { type: "tool_start", tool: call.function.name, call_id: call.id, input: call.function.arguments } });
@@ -1339,9 +1343,16 @@ async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMess
             result = await executeTool(call.function.name, args, sandbox, plan, (value) => stream.send({ type: "agent_event", task_id: taskId, step: steps, event: { type: "plan_update", plan: value } }), signal);
             if (call.function.name === "cloud_browser_start" && result.status === "completed") {
               const browserId = browserIdFrom(result);
-              if (browserId) cloudBrowsers.add(browserId);
+              if (browserId) {
+                cloudBrowsers.add(browserId);
+                result.result.viewer_id = await browserControl.registerChatBrowser(taskId, result.result);
+              }
             }
-            if (call.function.name === "cloud_browser_stop" && result.status === "completed") cloudBrowsers.delete(asString(args.browser_id, "browser_id"));
+            if (call.function.name === "cloud_browser_stop" && result.status === "completed") {
+              const browserId = asString(args.browser_id, "browser_id");
+              cloudBrowsers.delete(browserId);
+              await browserControl.markChatBrowserStopped(browserId);
+            }
           }
         } catch (error) {
           if (signal.aborted) throw abortFault(signal);
@@ -1350,6 +1361,7 @@ async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMess
           const status: ToolStatus = code === "UNKNOWN_OUTCOME" || code === "EXECUTION_UNKNOWN" ? "unknown" : "error";
           result = { status, result: { code, message: error instanceof AgentFault ? error.message : error instanceof Error ? `Eszközfuttatási hiba: ${error.message}` : "Eszközfuttatási hiba." } };
         }
+        await browserControl.setBrowserAgentBusy(taskId, false);
         const serialized = sanitizeResult(result);
         await stream.send({ type: "agent_event", task_id: taskId, step: steps, event: { type: "tool_result", tool: call.function.name, call_id: call.id, status: serialized.status, output: serialized.content } });
         trace.push(`${actionText.slice(0, 300)} => ${serialized.status}: ${serialized.content.slice(0, 400)}`);
@@ -1389,13 +1401,18 @@ async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMess
       slot.controller.abort(new AgentFault("CANCELLED", "A háttérmérlegelés leállt.", 499));
       await slot.promise;
     }
+    await browserControl.setBrowserAgentBusy(taskId, false).catch(() => undefined);
     if (cloudBrowsers.size > 0) {
+      if (!signal.aborted) await browserControl.waitForBrowserControl(taskId, signal).catch(() => undefined);
       try {
         const cloud = await import("@/lib/cloud-browser.server");
         for (const browserId of [...cloudBrowsers]) {
           try {
             const stopped = await cloud.stopCloudBrowser(browserId, AbortSignal.timeout(CLEANUP_TIMEOUT_MS));
-            if (stopped.status === "completed") cloudBrowsers.delete(browserId);
+            if (stopped.status === "completed") {
+              cloudBrowsers.delete(browserId);
+              await browserControl.markChatBrowserStopped(browserId);
+            }
           } catch (error) {
             console.error("chat_cloud_browser_stop_failed", taskId, browserId, error);
           }

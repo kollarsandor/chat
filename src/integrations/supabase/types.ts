@@ -191,6 +191,42 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_browser_sessions: {
+        Row: {
+          agent_busy: boolean
+          browser_id: string
+          cdp_url: string
+          control_mode: string
+          created_at: string
+          id: string
+          job_id: string
+          live_url: string | null
+          status: string
+        }
+        Insert: {
+          agent_busy?: boolean
+          browser_id: string
+          cdp_url: string
+          control_mode?: string
+          created_at?: string
+          id?: string
+          job_id: string
+          live_url?: string | null
+          status?: string
+        }
+        Update: {
+          agent_busy?: boolean
+          browser_id?: string
+          cdp_url?: string
+          control_mode?: string
+          created_at?: string
+          id?: string
+          job_id?: string
+          live_url?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       chat_conversations: {
         Row: {
           created_at: string
@@ -305,6 +341,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_chat_browser_step: { Args: { _job_id: string }; Returns: boolean }
       kick_chat_worker: {
         Args: { _base_url: string; _job_id: string }
         Returns: number
