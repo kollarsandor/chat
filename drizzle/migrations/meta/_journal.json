@@ -15,6 +15,13 @@
       "when": 1792133364424,
       "tag": "0001_browser_human_control",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792133410195,
+      "tag": "0002_browser_control_handoff",
+      "breakpoints": true
     }
   ]
 }

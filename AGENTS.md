@@ -16,3 +16,4 @@
 - Forward provider reasoning and cognitive model output through reasoning_content SSE deltas, keeping cognitive output separate from the final answer so the existing thinking panel can display every emitted fragment.
 - Image requests use a multipart server route that keeps the external provider key server-side and forwards the provider response stream; the existing image dialog parses the provider's image results and requires a real reference image for edit models.
 - Background chat jobs run in the app's own /api/public/chat-worker route, started by a database HTTP call (pg_net) so the work survives browser closure; a 90s heartbeat lease lets reconnecting viewers restart a crashed job.
+- Live browser viewing uses direct CDP screenshot capture and input on a separate persistent canvas; database-backed browser control handoff pauses model tool steps across worker invocations before enabling human input.
