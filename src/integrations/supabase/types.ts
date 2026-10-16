@@ -191,6 +191,39 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_browser_sessions: {
+        Row: {
+          browser_id: string
+          cdp_url: string
+          control_mode: string
+          created_at: string
+          id: string
+          job_id: string
+          live_url: string | null
+          status: string
+        }
+        Insert: {
+          browser_id: string
+          cdp_url: string
+          control_mode?: string
+          created_at?: string
+          id?: string
+          job_id: string
+          live_url?: string | null
+          status?: string
+        }
+        Update: {
+          browser_id?: string
+          cdp_url?: string
+          control_mode?: string
+          created_at?: string
+          id?: string
+          job_id?: string
+          live_url?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       chat_conversations: {
         Row: {
           created_at: string
