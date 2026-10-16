@@ -37,7 +37,7 @@ function failure(error: unknown): CloudBrowserResult {
 
 export async function startCloudBrowser(countryCode: string, timeoutMinutes: number, signal: AbortSignal): Promise<CloudBrowserResult> {
   try {
-    const browser = await call("", "POST", { proxyCountryCode: countryCode || "us", timeout: Math.min(240, Math.max(1, timeoutMinutes || 240)), allowResizing: true, enableRecording: true }, signal);
+    const browser = await call("", "POST", { proxyCountryCode: countryCode || "us", timeout: Math.min(240, Math.max(1, timeoutMinutes || 240)), allowResizing: true, enableRecording: true, browserScreenWidth: 1280, browserScreenHeight: 1029 }, signal);
     const id = String(browser.id ?? "");
     if (!id || !browser.cdpUrl) throw new Error("A böngésző nem adott vissza CDP címet.");
     track(signal).add(id);
@@ -75,7 +75,7 @@ export async function stopAllCloudBrowsers(signal: AbortSignal): Promise<void> {
 
 export async function registerChatBrowser(jobId: string, result: Record<string, unknown>): Promise<string> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin.from("chat_browser_sessions").insert({ job_id: jobId, browser_id: String(result.browser_id), cdp_url: String(result.cdp_url), live_url: typeof result.live_url === "string" ? result.live_url : null }).select("id").single();
+  const { data, error } = await supabaseAdmin.from("chat_browser_sessions").insert({ job_id: jobId, browser_id: String(result.browser_id), cdp_url: String(result.cdp_url), live_url: typeof result.live_url === "string" ? result.live_url : null, agent_busy: true }).select("id").single();
   if (error || !data) throw new Error("A böngészőnézet mentése sikertelen.");
   return data.id;
 }
@@ -83,9 +83,9 @@ export async function registerChatBrowser(jobId: string, result: Record<string, 
 export async function waitForBrowserControl(jobId: string, signal: AbortSignal): Promise<void> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   while (!signal.aborted) {
-    const { data, error } = await supabaseAdmin.from("chat_browser_sessions").select("control_mode").eq("job_id", jobId).eq("status", "active");
+    const { data, error } = await supabaseAdmin.rpc("claim_chat_browser_step", { _job_id: jobId });
     if (error) throw new Error("A böngésző irányítása nem ellenőrizhető.");
-    if (!data?.some((row) => row.control_mode !== "agent")) return;
+    if (data === true) return;
     await new Promise((resolve) => setTimeout(resolve, 700));
   }
   throw signal.reason;
