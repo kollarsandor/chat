@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiBrowserRouteImport } from './routes/api/browser'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiConversationsRouteImport } from './routes/api/conversations'
 import { Route as ApiOperatorRouteImport } from './routes/api/operator'
@@ -22,6 +23,11 @@ import { Route as ApiChatJobsJobIdStopRouteImport } from './routes/api/chat/jobs
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBrowserRoute = ApiBrowserRouteImport.update({
+  id: '/api/browser',
+  path: '/api/browser',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiChatRoute = ApiChatRouteImport.update({
@@ -68,6 +74,7 @@ const ApiChatJobsJobIdStopRoute = ApiChatJobsJobIdStopRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/browser': typeof ApiBrowserRoute
   '/api/chat': typeof ApiChatRouteWithChildren
   '/api/conversations': typeof ApiConversationsRoute
   '/api/operator': typeof ApiOperatorRoute
@@ -79,6 +86,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/browser': typeof ApiBrowserRoute
   '/api/chat': typeof ApiChatRouteWithChildren
   '/api/conversations': typeof ApiConversationsRoute
   '/api/operator': typeof ApiOperatorRoute
@@ -91,6 +99,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/browser': typeof ApiBrowserRoute
   '/api/chat': typeof ApiChatRouteWithChildren
   '/api/conversations': typeof ApiConversationsRoute
   '/api/operator': typeof ApiOperatorRoute
@@ -104,6 +113,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/api/browser'
     | '/api/chat'
     | '/api/conversations'
     | '/api/operator'
@@ -115,6 +125,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/api/browser'
     | '/api/chat'
     | '/api/conversations'
     | '/api/operator'
@@ -126,6 +137,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/api/browser'
     | '/api/chat'
     | '/api/conversations'
     | '/api/operator'
@@ -138,6 +150,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiBrowserRoute: typeof ApiBrowserRoute
   ApiChatRoute: typeof ApiChatRouteWithChildren
   ApiConversationsRoute: typeof ApiConversationsRoute
   ApiOperatorRoute: typeof ApiOperatorRoute
@@ -152,6 +165,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/browser': {
+      id: '/api/browser'
+      path: '/api/browser'
+      fullPath: '/api/browser'
+      preLoaderRoute: typeof ApiBrowserRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/chat': {
@@ -230,6 +250,7 @@ const ApiChatRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiBrowserRoute: ApiBrowserRoute,
   ApiChatRoute: ApiChatRouteWithChildren,
   ApiConversationsRoute: ApiConversationsRoute,
   ApiOperatorRoute: ApiOperatorRoute,
