@@ -72,3 +72,33 @@ export async function stopAllCloudBrowsers(signal: AbortSignal): Promise<void> {
     set.delete(id);
   }));
 }
+
+export async function registerChatBrowser(jobId: string, result: Record<string, unknown>): Promise<string> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin.from("chat_browser_sessions").insert({ job_id: jobId, browser_id: String(result.browser_id), cdp_url: String(result.cdp_url), live_url: typeof result.live_url === "string" ? result.live_url : null }).select("id").single();
+  if (error || !data) throw new Error("A böngészőnézet mentése sikertelen.");
+  return data.id;
+}
+
+export async function waitForBrowserControl(jobId: string, signal: AbortSignal): Promise<void> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  while (!signal.aborted) {
+    const { data, error } = await supabaseAdmin.from("chat_browser_sessions").select("control_mode").eq("job_id", jobId).eq("status", "active");
+    if (error) throw new Error("A böngésző irányítása nem ellenőrizhető.");
+    if (!data?.some((row) => row.control_mode !== "agent")) return;
+    await new Promise((resolve) => setTimeout(resolve, 700));
+  }
+  throw signal.reason;
+}
+
+export async function setBrowserAgentBusy(jobId: string, busy: boolean): Promise<void> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { error } = await supabaseAdmin.from("chat_browser_sessions").update({ agent_busy: busy }).eq("job_id", jobId).eq("status", "active");
+  if (error) throw new Error("A böngésző irányításának frissítése sikertelen.");
+  if (!busy) await supabaseAdmin.from("chat_browser_sessions").update({ control_mode: "human" }).eq("job_id", jobId).eq("status", "active").eq("control_mode", "requested");
+}
+
+export async function markChatBrowserStopped(browserId: string): Promise<void> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  await supabaseAdmin.from("chat_browser_sessions").update({ status: "stopped", control_mode: "agent", agent_busy: false }).eq("browser_id", browserId);
+}
