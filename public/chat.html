@@ -12,6 +12,7 @@
 <meta name="color-scheme" content="dark">
 <meta name="format-detection" content="telephone=no">
 <title>Chat</title>
+<link rel="stylesheet" href="/chat-work.css">
 
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -8531,6 +8532,7 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
           if(data === "[DONE]"){ streamDone = true; return; }
           var event;
           try{ event = JSON.parse(data); }catch(e){ return; }
+          if(window.chatWorkEvent) window.chatWorkEvent(event);
            if(event.type === "meta"){
              if(event.conversation_id){
                conversationId = event.conversation_id;
@@ -8818,6 +8820,7 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
    });
    bindImageFlowControls();
   function updateResumedMessage(message, event){
+    if(window.chatWorkEvent) window.chatWorkEvent(event);
     if(event.type === "meta"){
       if(event.job_id) activeChatJobId = event.job_id;
       return;
@@ -10141,5 +10144,6 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
 })();
 </script>
 
+<script src="/chat-work.js"></script>
 </body>
 </html>

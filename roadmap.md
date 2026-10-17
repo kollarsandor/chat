@@ -1,4 +1,5 @@
 # Chat streaming
+- [ ] Replace preliminary answers with periodic actual-work status and verify a real chat.
 - [ ] Add real live cloud browser canvas and human takeover, verify with an actual cloud browser.
 - [x] Move chat execution to durable background jobs and restore replies after reload or browser closure.
 - [x] Browser-independent continuation via own worker route (Inngest removed).
