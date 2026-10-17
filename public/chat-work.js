@@ -17,6 +17,8 @@
   content.insertBefore(status,composer);
   var stage=document.getElementById("browser-stage"), canvas=document.getElementById("browser-canvas"), control=document.getElementById("browser-control"), state=document.getElementById("browser-state"), toggle=document.getElementById("browser-toggle"), tabs=document.getElementById("browser-tabs"), empty=document.getElementById("browser-empty");
   var drawing=canvas.getContext("2d"), session=null, conversation=null, opened=false, mode="agent", polling=false, generation=0, inputQueue=Promise.resolve(), progressJob=null;
+  var remembered=null;
+  try{remembered=sessionStorage.getItem("chat_live_conversation");}catch(e){}
   function work(event){
     if(event.type==="progress"){
       progressJob=event.task_id;
@@ -53,8 +55,12 @@
   }
   async function discover(){
     var app=window.chatApp;
+    if(app&&!app.getConversationId()&&remembered){
+      var entry=app.getHistory().find(function(item){return item.conversation_id===remembered;});
+      if(entry){app.loadConversation(entry.id);remembered=null;}
+    }
     var id=app&&app.getConversationId();
-    if(id!==conversation){conversation=id;selectSession(null);status.hidden=true;}
+    if(id!==conversation){conversation=id;selectSession(null);status.hidden=true;try{if(id)sessionStorage.setItem("chat_live_conversation",id);else sessionStorage.removeItem("chat_live_conversation");}catch(e){}}
     if(!id)return;
     try{
       var result=await request("/api/browser?conversation="+encodeURIComponent(id));
