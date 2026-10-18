@@ -1287,7 +1287,7 @@ async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMess
       await progress();
       const upstream = await callModel(config, messages, tools, signal, deadline);
       const received = await receiveModel(upstream, taskId, steps, (ev) => {
-        if (ev.type === "delta" && ev.content) return stream.send({ ...ev, content: undefined, reasoning_content: ev.content });
+        if (ev.type === "delta" && ev.content) return stream.send({ type: "delta", task_id: ev.task_id, step: ev.step, reasoning_content: ev.content });
         return stream.send(ev);
       });
       if (received.finish === "stop") {
