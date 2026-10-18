@@ -19,3 +19,5 @@
 #browser-control:disabled{opacity:.6;cursor:wait}
 #browser-empty{padding:12px;color:var(--fg2);font-size:13px}
 #browser-empty[hidden]{display:none}
+#media-lightbox[aria-hidden="true"]{visibility:hidden;pointer-events:none}
+#media-lightbox[aria-hidden="true"] *{pointer-events:none!important}
