@@ -1487,24 +1487,31 @@ export const Route = createFileRoute("/api/chat")({
           await dispatchChatJob(jobId, request.url);
           const follower = followChatJob(jobId, 0, request.signal, request.url);
           const reader = follower.getReader();
+          let streamClosed = false;
           const stream = new ReadableStream<Uint8Array>({
             start(controller) {
               controller.enqueue(textEncoder.encode(`data: ${JSON.stringify({ type: "meta", conversation_id: conversationId, job_id: jobId })}\n\n`));
             },
             async pull(controller) {
+              if (streamClosed) return;
               try {
                 const next = await reader.read();
+                if (streamClosed) return;
                 if (next.done) {
+                  streamClosed = true;
                   controller.close();
                   return;
                 }
                 controller.enqueue(next.value);
               } catch (error) {
+                if (streamClosed) return;
+                streamClosed = true;
                 console.error("chat_stream_follow_failed", jobId, error);
                 controller.error(error);
               }
             },
             cancel(reason) {
+              streamClosed = true;
               return reader.cancel(reason).catch(() => undefined);
             }
           });
