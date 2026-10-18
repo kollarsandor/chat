@@ -1,4 +1,4 @@
-import { createAPIFileRoute } from "@tanstack/start/api";
+import { createFileRoute } from "@tanstack/react-router";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 type ControlMode = "agent" | "requested" | "human";
@@ -623,7 +623,9 @@ async function handleHandback(id: string): Promise<Response> {
   return json({ ok: true, id, control_mode: "agent" });
 }
 
-export const APIRoute = createAPIFileRoute("/api/browser")({
+export const Route = createFileRoute("/api/browser")({
+  server: {
+    handlers: {
   GET: async ({ request }: { request: Request }) => {
     try {
       const url = parseRequestUrl(request);
@@ -672,5 +674,7 @@ export const APIRoute = createAPIFileRoute("/api/browser")({
       return json({ error: "Belső szerverhiba." }, 500);
     }
   },
+    },
+  },
 });
-```[browser.ts](https://files.use.ai/files/chat%2Ffiles%2Fd7170d03a4b76d9ba01ce8e1db85665cf68668155c4e1006460e734cba78a608%2Fbrowser.ts?v=1792325731806)
+```[browser.ts](https://files.use.ai/files/chat%2Ffiles%2Fd7170d03a4b76d9ba01ce8e1db85665cf68668155c4e1006460e734cba78a608%2Fbrowser.ts?v=1792326103069)
