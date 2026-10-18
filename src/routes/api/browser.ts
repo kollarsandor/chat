@@ -677,4 +677,3 @@ export const Route = createFileRoute("/api/browser")({
     },
   },
 });
-```[browser.ts](https://files.use.ai/files/chat%2Ffiles%2Fd7170d03a4b76d9ba01ce8e1db85665cf68668155c4e1006460e734cba78a608%2Fbrowser.ts?v=1792326103069)
