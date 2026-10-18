@@ -41,6 +41,9 @@
   function selectSession(id){
     if(session===id)return;
     session=id;generation++;mode="agent";
+    delete canvas.dataset.frame;
+    control.disabled=true;
+    mobileInput.hidden=true;
     if(drawing)drawing.clearRect(0,0,canvas.width,canvas.height);
     state.textContent=id?"Kapcsolódás…":"";
     show();
@@ -69,7 +72,9 @@
       tabs.replaceChildren();
       sessions.forEach(function(item,index){var option=document.createElement("option");option.value=item.id;option.textContent="Böngésző "+(index+1)+(item.status==="active"?"":" · leállt");tabs.appendChild(option);});
       tabs.hidden=sessions.length<2;
-      if(!sessions.some(function(item){return item.id===session;})){
+      var active=sessions.find(function(item){return item.status==="active";});
+      var current=sessions.find(function(item){return item.id===session;});
+      if(!current||(current.status!=="active"&&active)){
         var selected=sessions.find(function(item){return item.status==="active";})||sessions[0];
         selectSession(selected?selected.id:null);
         if(selected&&selected.status==="active"){opened=true;show();}
@@ -95,21 +100,25 @@
         image.src="data:image/jpeg;base64,"+result.data;
       }
     }catch(error){if(version===generation)state.textContent=error.message;}
-    finally{polling=false;}
+    finally{polling=false;if(version!==generation)frame();}
   }
   control.addEventListener("click",async function(){
     if(!session)return;
     control.disabled=true;
+    var id=session,version=generation,returning=mode==="human";
     try{
-      await request("/api/browser",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:session,mode:mode==="human"?"agent":"human"})});
+      mode="requested";
+      await inputQueue;
+      await request("/api/browser",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:id,mode:returning?"agent":"human"})});
+      if(version!==generation)return;
       await frame();
       if(mode==="human")canvas.focus();
     }catch(error){state.textContent=error.message;control.disabled=false;}
   });
   function input(data){
     if(mode!=="human"||!session)return;
-    var id=session;
-    inputQueue=inputQueue.then(function(){return request("/api/browser",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:id,input:data})});}).catch(function(error){state.textContent=error.message;});
+    var id=session,version=generation;
+    inputQueue=inputQueue.then(function(){if(mode!=="human"||session!==id||version!==generation)return;return request("/api/browser",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:id,input:data})});}).catch(function(error){if(version===generation)state.textContent=error.message;});
     return inputQueue;
   }
   function point(event){var rect=canvas.getBoundingClientRect();return {x:Math.max(0,Math.min(1280,(event.clientX-rect.left)*1280/rect.width)),y:Math.max(0,Math.min(1029,(event.clientY-rect.top)*1029/rect.height))};}

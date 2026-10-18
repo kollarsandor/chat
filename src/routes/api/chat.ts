@@ -1286,7 +1286,10 @@ async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMess
       currentActivity = `A következő lépést dolgozom ki${steps ? `; eddig ${callCount} műveletet végeztem` : ""}.`;
       await progress();
       const upstream = await callModel(config, messages, tools, signal, deadline);
-      const received = await receiveModel(upstream, taskId, steps, (ev) => stream.send(ev));
+      const received = await receiveModel(upstream, taskId, steps, (ev) => {
+        if (ev.type === "delta" && ev.content) return stream.send({ type: "delta", task_id: ev.task_id, step: ev.step, reasoning_content: ev.content });
+        return stream.send(ev);
+      });
       if (received.finish === "stop") {
         if (!received.content.trim()) return fail("EMPTY_ANSWER", "A modell nem adott befejező választ.", 502);
         await applyDeliberation(true);
@@ -1294,6 +1297,7 @@ async function agentRun(taskId: string, config: RuntimeConfig, history: ChatMess
         const check = await cog.verify(sigma, probe);
         await note("ellenőrzés", check.ok ? "Minden célfeltétel teljesült." : check.failures.join("\n"));
         if (check.ok) {
+          await stream.send({ type: "delta", task_id: taskId, step: steps, content: received.content });
           verified = true;
           outcome = "completed";
           reason = "A célfeltételeket determinisztikus külső ellenőrzés igazolta.";
@@ -1487,24 +1491,31 @@ export const Route = createFileRoute("/api/chat")({
           await dispatchChatJob(jobId, request.url);
           const follower = followChatJob(jobId, 0, request.signal, request.url);
           const reader = follower.getReader();
+          let streamClosed = false;
           const stream = new ReadableStream<Uint8Array>({
             start(controller) {
               controller.enqueue(textEncoder.encode(`data: ${JSON.stringify({ type: "meta", conversation_id: conversationId, job_id: jobId })}\n\n`));
             },
             async pull(controller) {
+              if (streamClosed) return;
               try {
                 const next = await reader.read();
+                if (streamClosed) return;
                 if (next.done) {
+                  streamClosed = true;
                   controller.close();
                   return;
                 }
                 controller.enqueue(next.value);
               } catch (error) {
+                if (streamClosed) return;
+                streamClosed = true;
                 console.error("chat_stream_follow_failed", jobId, error);
                 controller.error(error);
               }
             },
             cancel(reason) {
+              streamClosed = true;
               return reader.cancel(reason).catch(() => undefined);
             }
           });
